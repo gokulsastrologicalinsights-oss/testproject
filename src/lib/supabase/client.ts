@@ -167,11 +167,206 @@ const mockAuth = {
   }
 };
 
+class MockQueryBuilder {
+  private tableName: string;
+  private filters: Array<(item: any) => boolean> = [];
+  private isSingle = false;
+  private isMaybeSingle = false;
+  private limitCount = 0;
+  private insertData: any = null;
+  private updateData: any = null;
+  private doDelete = false;
+
+  constructor(tableName: string) {
+    this.tableName = tableName;
+  }
+
+  private getStorageKey() {
+    return `gokul_mock_${this.tableName}`;
+  }
+
+  private getData() {
+    if (typeof window === 'undefined') return [];
+    try {
+      const data = localStorage.getItem(this.getStorageKey());
+      if (data) return JSON.parse(data);
+    } catch (e) {}
+
+    // Seed defaults
+    if (this.tableName === 'admin_users') {
+      return [{
+        id: 'admin-user-id',
+        auth_user_id: 'demo-admin-id',
+        full_name: 'Gokul Admin',
+        email: 'admin@gokul.com',
+        role: 'admin'
+      }];
+    }
+    return [];
+  }
+
+  private saveData(data: any) {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(this.getStorageKey(), JSON.stringify(data));
+    } catch (e) {}
+  }
+
+  select(columns?: string, options?: any) {
+    return this;
+  }
+
+  insert(data: any) {
+    this.insertData = data;
+    return this;
+  }
+
+  update(data: any) {
+    this.updateData = data;
+    return this;
+  }
+
+  delete() {
+    this.doDelete = true;
+    return this;
+  }
+
+  eq(column: string, value: any) {
+    this.filters.push((item: any) => item[column] === value);
+    return this;
+  }
+
+  or(expr: string) {
+    const parts = expr.split(',');
+    this.filters.push((item: any) => {
+      return parts.some(part => {
+        const subparts = part.trim().split('.');
+        const col = subparts[0];
+        const op = subparts[1];
+        const val = subparts[2];
+        if (op === 'eq') {
+          return item[col] === val;
+        }
+        return false;
+      });
+    });
+    return this;
+  }
+
+  in(column: string, values: any[]) {
+    this.filters.push((item: any) => values.includes(item[column]));
+    return this;
+  }
+
+  gte(column: string, value: any) {
+    this.filters.push((item: any) => item[column] >= value);
+    return this;
+  }
+
+  lte(column: string, value: any) {
+    this.filters.push((item: any) => item[column] <= value);
+    return this;
+  }
+
+  ilike(column: string, pattern: string) {
+    const regex = new RegExp(pattern.replace(/%/g, '.*'), 'i');
+    this.filters.push((item: any) => regex.test(item[column]));
+    return this;
+  }
+
+  order(column: string, options?: any) {
+    return this;
+  }
+
+  limit(value: number) {
+    this.limitCount = value;
+    return this;
+  }
+
+  single() {
+    this.isSingle = true;
+    return this;
+  }
+
+  maybeSingle() {
+    this.isMaybeSingle = true;
+    return this;
+  }
+
+  async then(onfulfilled?: (value: any) => any, onrejected?: (reason: any) => any) {
+    try {
+      const result = await this.execute();
+      if (onfulfilled) return onfulfilled(result);
+      return result;
+    } catch (e) {
+      if (onrejected) return onrejected(e);
+      throw e;
+    }
+  }
+
+  private async execute() {
+    let items = this.getData();
+
+    if (this.insertData) {
+      const dataArray = Array.isArray(this.insertData) ? this.insertData : [this.insertData];
+      const inserted = dataArray.map(d => ({
+        id: d.id || Math.random().toString(36).substr(2, 9),
+        created_at: new Date().toISOString(),
+        ...d
+      }));
+      items.push(...inserted);
+      this.saveData(items);
+      return { data: Array.isArray(this.insertData) ? inserted : inserted[0], error: null };
+    }
+
+    if (this.updateData) {
+      items = items.map((item: any) => {
+        const matches = this.filters.every((f: any) => f(item));
+        if (matches) {
+          return { ...item, ...this.updateData };
+        }
+        return item;
+      });
+      this.saveData(items);
+      const updated = items.filter((item: any) => this.filters.every((f: any) => f(item)));
+      return { data: this.isSingle || this.isMaybeSingle ? updated[0] || null : updated, error: null };
+    }
+
+    if (this.doDelete) {
+      const remaining = items.filter((item: any) => !this.filters.every((f: any) => f(item)));
+      this.saveData(remaining);
+      return { data: null, error: null };
+    }
+
+    let filtered = items.filter((item: any) => this.filters.every((f: any) => f(item)));
+
+    if (this.limitCount > 0) {
+      filtered = filtered.slice(0, this.limitCount);
+    }
+
+    if (this.isSingle) {
+      if (filtered.length === 0) {
+        return { data: null, error: { message: 'Row not found' } };
+      }
+      return { data: filtered[0], error: null };
+    }
+
+    if (this.isMaybeSingle) {
+      return { data: filtered[0] || null, error: null };
+    }
+
+    return { data: filtered, error: null };
+  }
+}
+
 export const supabase = isMock
   ? new Proxy(realSupabase, {
       get(target, prop) {
         if (prop === 'auth') {
           return mockAuth;
+        }
+        if (prop === 'from') {
+          return (tableName: string) => new MockQueryBuilder(tableName);
         }
         return (target as any)[prop];
       }

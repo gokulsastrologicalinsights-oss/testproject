@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Menu, X, Heart, User, LogOut, ShieldAlert, Phone } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -31,8 +32,16 @@ export default function Navbar() {
   }, []);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/';
+    try {
+      const secureFlag = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
+      document.cookie = `sb-access-token=; path=/; max-age=0; SameSite=Lax${secureFlag}`;
+      localStorage.removeItem('gokul_mock_session');
+      await useAuthStore.getState().logout();
+      window.location.href = '/';
+    } catch (e) {
+      console.error('Logout error:', e);
+      window.location.href = '/';
+    }
   };
 
   // Do not show main navbar inside the admin dashboard or admin login

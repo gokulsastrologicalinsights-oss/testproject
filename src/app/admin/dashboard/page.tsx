@@ -2,13 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { 
   Users, UserCheck, Star, ShieldAlert, FileSpreadsheet, 
   DollarSign, Check, X, Search, Bell, LogOut, ShieldCheck 
 } from 'lucide-react';
 import { adminService } from '@/services/admin.service';
+import { supabase } from '@/lib/supabase';
 
 export default function AdminDashboard() {
+  const router = useRouter();
   
   // Dashboard stats state
   const [stats, setStats] = useState({
@@ -108,6 +111,15 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleAdminSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      router.push('/admin/login');
+    } catch (e: any) {
+      alert('Error signing out: ' + e.message);
+    }
+  };
+
   return (
     <div className="flex-1 w-full min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans transition-colors">
       
@@ -141,13 +153,13 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <Link
-            href="/"
+          <button
+            onClick={handleAdminSignOut}
             className="p-2 rounded-full border border-zinc-800 hover:bg-zinc-800 text-zinc-400 cursor-pointer"
             title="Sign Out"
           >
             <LogOut className="h-4 w-4" />
-          </Link>
+          </button>
         </div>
       </header>
 

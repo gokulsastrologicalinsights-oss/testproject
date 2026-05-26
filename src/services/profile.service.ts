@@ -1,22 +1,13 @@
 import { supabase } from '@/lib/supabase';
 
-const isMockMode = () => {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  return !url || url.includes('placeholder') || !key || key.includes('placeholder');
-};
-
 export const profileService = {
   async getProfile(userId: string) {
     try {
-      if (isMockMode()) {
-        return { data: { id: userId, first_name: "Revathi", last_name: "S." }, error: null };
-      }
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
       return { data, error };
     } catch (err: any) {
       return { data: null, error: err };
@@ -25,9 +16,6 @@ export const profileService = {
 
   async createUser(userData: { id: string; auth_user_id: string; email: string; mobile_number: string }) {
     try {
-      if (isMockMode()) {
-        return { data: userData, error: null };
-      }
       const { data, error } = await supabase
         .from('users')
         .insert({
@@ -39,7 +27,7 @@ export const profileService = {
           status: 'active'
         })
         .select()
-        .single();
+        .maybeSingle();
       return { data, error };
     } catch (err: any) {
       return { data: null, error: err };
@@ -48,14 +36,11 @@ export const profileService = {
 
   async createProfile(profileData: any) {
     try {
-      if (isMockMode()) {
-        return { data: profileData, error: null };
-      }
       const { data, error } = await supabase
         .from('profiles')
         .insert(profileData)
         .select()
-        .single();
+        .maybeSingle();
       return { data, error };
     } catch (err: any) {
       return { data: null, error: err };
@@ -64,15 +49,12 @@ export const profileService = {
 
   async updateProfile(userId: string, data: any) {
     try {
-      if (isMockMode()) {
-        return { data: { success: true }, error: null };
-      }
       const { data: updated, error } = await supabase
         .from('profiles')
         .update(data)
         .eq('user_id', userId)
         .select()
-        .single();
+        .maybeSingle();
       return { data: updated, error };
     } catch (err: any) {
       return { data: null, error: err };
@@ -81,14 +63,11 @@ export const profileService = {
 
   async createPartnerPreferences(prefData: any) {
     try {
-      if (isMockMode()) {
-        return { data: prefData, error: null };
-      }
       const { data, error } = await supabase
         .from('partner_preferences')
         .insert(prefData)
         .select()
-        .single();
+        .maybeSingle();
       return { data, error };
     } catch (err: any) {
       return { data: null, error: err };
@@ -97,14 +76,11 @@ export const profileService = {
 
   async createHoroscopeUpload(uploadData: { user_id: string; file_url: string; file_name: string; file_type: string }) {
     try {
-      if (isMockMode()) {
-        return { data: uploadData, error: null };
-      }
       const { data, error } = await supabase
         .from('horoscope_uploads')
         .insert(uploadData)
         .select()
-        .single();
+        .maybeSingle();
       return { data, error };
     } catch (err: any) {
       return { data: null, error: err };
@@ -113,14 +89,11 @@ export const profileService = {
   
   async createGalleryImage(imageData: { user_id: string; image_url: string; is_profile_picture: boolean; is_private: boolean }) {
     try {
-      if (isMockMode()) {
-        return { data: imageData, error: null };
-      }
       const { data, error } = await supabase
         .from('gallery_images')
         .insert(imageData)
         .select()
-        .single();
+        .maybeSingle();
       return { data, error };
     } catch (err: any) {
       return { data: null, error: err };

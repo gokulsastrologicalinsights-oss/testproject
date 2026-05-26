@@ -1,11 +1,13 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   Home, Heart, Star, UserCheck, ShieldAlert, 
   Settings, Compass, FileText, User
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 export default function DashboardLayout({
   children,
@@ -13,6 +15,43 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSidebarProfile = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data } = await supabase
+          .from('profiles')
+          .select('first_name, last_name, profile_id, is_premium, is_verified')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (data) {
+          setProfile(data);
+        } else {
+          // Fallback if profile row not created yet
+          const nameParts = user.user_metadata?.full_name?.split(' ') || ['Member'];
+          setProfile({
+            first_name: nameParts[0],
+            last_name: nameParts.slice(1).join(' ') || '',
+            profile_id: 'GVV-PENDING',
+            is_premium: false,
+            is_verified: false
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching sidebar profile:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSidebarProfile();
+  }, []);
 
   const links = [
     { name: 'Overview', href: '/dashboard', icon: Home },
@@ -20,6 +59,15 @@ export default function DashboardLayout({
     { name: 'Partner Preference', href: '/dashboard/preferences', icon: Settings },
     { name: 'My Profile', href: '/dashboard/profile', icon: User },
   ];
+
+  const initials = profile 
+    ? `${profile.first_name?.[0] || ''}${profile.last_name?.[0] || ''}`.toUpperCase() || 'M' 
+    : '..';
+  const fullName = profile 
+    ? `${profile.first_name} ${profile.last_name || ''}`.trim() 
+    : 'Loading...';
+  const profileId = profile ? `ID: ${profile.profile_id}` : '...';
+  const memberLevel = profile?.is_premium ? 'Premium Member' : 'Standard Member';
 
   return (
     <div className="flex-1 w-full bg-sandal-50/30 dark:bg-zinc-950/20 py-8 transition-colors">
@@ -31,18 +79,20 @@ export default function DashboardLayout({
             
             {/* Quick Profile Summary in Sidebar */}
             <div className="flex flex-col items-center text-center gap-3">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-sandal-300 to-rose-100 dark:from-zinc-800 dark:to-maroon-950/20 border-2 border-gold-400 flex items-center justify-center font-serif text-2xl font-bold text-maroon-700 dark:text-gold-400">
-                RM
+              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-sandal-300 to-rose-100 dark:from-zinc-800 dark:to-maroon-950/20 border-2 border-gold-400 flex items-center justify-center font-serif text-2xl font-bold text-maroon-700 dark:text-gold-400 shadow-sm">
+                {initials}
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="text-base font-serif font-bold text-zinc-900 dark:text-zinc-50 flex items-center justify-center gap-1">
-                  Revathi M.
-                  <span className="w-3.5 h-3.5 bg-emerald-600 rounded-full flex items-center justify-center text-[8px] font-bold text-white uppercase tracking-normal" title="Verified Member">✓</span>
+                  {fullName}
+                  {profile?.is_verified && (
+                    <span className="w-3.5 h-3.5 bg-emerald-600 rounded-full flex items-center justify-center text-[8px] font-bold text-white uppercase tracking-normal" title="Verified Member">✓</span>
+                  )}
                 </span>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">ID: GVV-1249</span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">{profileId}</span>
               </div>
               <div className="px-3 py-1 rounded-full bg-gold-400/20 text-[10px] font-bold text-gold-700 dark:text-gold-400 uppercase tracking-widest leading-none">
-                Gold Elite Member
+                {memberLevel}
               </div>
             </div>
 
