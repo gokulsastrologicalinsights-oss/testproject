@@ -1,0 +1,152 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-sans: 'Outfit', 'Inter', sans-serif;
+  --font-tamil: 'Noto Sans Tamil', sans-serif;
+
+  --color-primary: #c8a95b;
+  --color-primary-light: #d9bc76;
+  --color-primary-dark: #a8883f;
+
+  --color-secondary: #6d1f1f;
+  --color-secondary-light: #8c3838;
+  --color-secondary-dark: #521515;
+
+  --color-background-light: #ffffff;
+  --color-background-muted: #faf7f2;
+  --color-background-dark: #111111;
+
+  --color-text-primary: #1f1f1f;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-gold: 0 4px 20px -2px rgba(200, 169, 91, 0.25);
+  --shadow-maroon: 0 4px 20px -2px rgba(109, 31, 31, 0.25);
+
+  --color-sandal-50: #faf7f0;
+  --color-sandal-100: #ead8b1;
+  --color-sandal-200: #dfcb9e;
+  --color-sandal-300: #d4bd8b;
+  --color-sandal-400: #c9ae78;
+  --color-sandal-500: #bca066;
+
+  --color-gold-50: #fbf9f2;
+  --color-gold-100: #f5eed3;
+  --color-gold-200: #eadcb2;
+  --color-gold-300: #decb91;
+  --color-gold-400: #d3b970;
+  --color-gold-500: #c8a95b;
+  --color-gold-600: #b19349;
+  --color-gold-700: #9a7d38;
+  
+  --color-maroon-50: #f9f2f2;
+  --color-maroon-100: #ebcfcf;
+  --color-maroon-200: #dcacac;
+  --color-maroon-300: #cd8a8a;
+  --color-maroon-400: #be6767;
+  --color-maroon-500: #6d1f1f;
+  --color-maroon-600: #5d1717;
+  --color-maroon-700: #4e1111;
+  --color-maroon-800: #3f0a0a;
+
+  --color-saffron-50: #fef8f0;
+  --color-saffron-100: #fdf0dc;
+  --color-saffron-500: #f4c430;
+  --color-saffron-600: #dfb221;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #1f1f1f;
+}
+
+.dark {
+  --background: #12100e;
+  --foreground: #f5f1eb;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Outfit', sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+h1, h2, h3, h4, h5, h6, .font-serif {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+/* Custom premium styles */
+.luxury-gradient {
+  background: linear-gradient(135deg, #800020 0%, #550014 100%);
+}
+
+.gold-gradient {
+  background: linear-gradient(135deg, #d4af37 0%, #b2912a 100%);
+}
+
+.gold-border {
+  border-color: #d4af37;
+}
+
+.glass-panel {
+  background: rgba(253, 251, 247, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(212, 175, 55, 0.15);
+}
+
+.dark .glass-panel {
+  background: rgba(18, 16, 14, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(212, 175, 55, 0.1);
+}
+
+/* Custom transitions and scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cb9d50;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b2912a;
+}
+
+/* Accessibility & Touch Targets */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-delay: -1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    background-attachment: initial !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+}
+
