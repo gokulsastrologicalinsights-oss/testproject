@@ -1,14 +1,9 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabase as clientSupabase } from './supabase/client';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://gokul-vivaham-temp.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder-key';
+export const supabase = clientSupabase;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// Helper functions for mock data if Supabase keys aren't set
 export const isSupabaseConfigured = () => {
-  return (
-    process.env.NEXT_PUBLIC_SUPABASE_URL !== undefined &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== undefined
-  );
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  return !!(url && !url.includes('placeholder') && key && !key.includes('placeholder'));
 };
