@@ -8,6 +8,8 @@ import {
   X, Star, HelpCircle, Sparkles, BookOpen 
 } from 'lucide-react';
 import MatchFilters from '@/components/matchmaking/MatchFilters';
+import { matchService } from '@/services/match.service';
+import { supabase } from '@/lib/supabase';
 
 function MatchesContent() {
   const searchParams = useSearchParams();
@@ -41,178 +43,46 @@ function MatchesContent() {
     if (rel) setReligion(rel);
   }, [searchParams]);
 
-  // Master Mock Profile Database
-  const allProfiles = [
-    {
-      id: 'GVV-089',
-      name: 'Gokulakrishnan M.',
-      gender: 'Male',
-      age: 28,
-      height: '178 cm',
-      religion: 'Hindu',
-      caste: 'Iyer',
-      subCaste: 'Vadama',
-      rasi: 'Dhanusu',
-      star: 'Pooradam',
-      gothram: 'Bharadwaj',
-      location: 'Bangalore',
-      native: 'Thanjavur',
-      education: 'MBA Project Manager',
-      company: 'TCS',
-      income: '₹14,00,000',
-      about: 'A simple, modern individual who values family traditions. Enjoys travel, South Indian music, and reading.',
-      familyType: 'Nuclear',
-      siblings: '1 sister (married)',
-      score: 95,
-      isVerified: true,
-      maritalStatus: 'Never Married'
-    },
-    {
-      id: 'GVV-045',
-      name: 'Venkatesh Prasad S.',
-      gender: 'Male',
-      age: 30,
-      height: '174 cm',
-      religion: 'Hindu',
-      caste: 'Iyer',
-      subCaste: 'Vadama',
-      rasi: 'Mesham',
-      star: 'Aswini',
-      gothram: 'Srivatsa',
-      location: 'Chennai',
-      native: 'Madurai',
-      education: 'MS Cloud Architect',
-      company: 'Cognizant',
-      income: '₹18,00,000',
-      about: 'Career-oriented but down-to-earth. Respects values and loves visiting temples. Looking for a compatible life partner.',
-      familyType: 'Joint',
-      siblings: 'None',
-      score: 88,
-      isVerified: true,
-      maritalStatus: 'Never Married'
-    },
-    {
-      id: 'GVV-112',
-      name: 'Karthik N.',
-      gender: 'Male',
-      age: 27,
-      height: '180 cm',
-      religion: 'Hindu',
-      caste: 'Iyer',
-      subCaste: 'Brahacharanam',
-      rasi: 'Simham',
-      star: 'Pooram',
-      gothram: 'Koundinya',
-      location: 'Singapore',
-      native: 'Tiruchirappalli',
-      education: 'B.Tech Tech Lead',
-      company: 'Grab',
-      income: 'SGD 95,000',
-      about: 'Living in Singapore for 4 years. Warm-hearted, vegetarian, loves cooking, and values transparency in relationships.',
-      familyType: 'Nuclear',
-      siblings: '1 younger brother',
-      score: 91,
-      isVerified: true,
-      maritalStatus: 'Never Married'
-    },
-    {
-      id: 'GVV-204',
-      name: 'Deepak Rajan',
-      gender: 'Male',
-      age: 31,
-      height: '175 cm',
-      religion: 'Christian',
-      caste: 'Roman Catholic',
-      subCaste: 'None',
-      rasi: 'N/A',
-      star: 'N/A',
-      gothram: 'N/A',
-      location: 'Chennai',
-      native: 'Nagercoil',
-      education: 'MD Pediatrician',
-      company: 'Apollo Hospital',
-      income: '₹22,00,000',
-      about: 'Dedicated doctor. Believes in mutual respect and work-life balance. Looking for an educated partner.',
-      familyType: 'Nuclear',
-      siblings: '1 elder sister',
-      score: 82,
-      isVerified: false,
-      maritalStatus: 'Never Married'
-    },
-    // Female Mock Profiles
-    {
-      id: 'GVV-088',
-      name: 'Soundarya S.',
-      gender: 'Female',
-      age: 26,
-      height: '163 cm',
-      religion: 'Hindu',
-      caste: 'Iyer',
-      subCaste: 'Vadama',
-      rasi: 'Simham',
-      star: 'Pooram',
-      gothram: 'Kasyapa',
-      location: 'Chennai',
-      native: 'Mylapore',
-      education: 'B.Tech Software Engineer',
-      company: 'Amazon',
-      income: '₹16,00,000',
-      about: 'Traditional at heart with a progressive outlook. Passionate about Classical dance and software design.',
-      familyType: 'Nuclear',
-      siblings: '1 younger brother',
-      score: 92,
-      isVerified: true,
-      maritalStatus: 'Never Married'
-    },
-    {
-      id: 'GVV-145',
-      name: 'Priya Narayanan',
-      gender: 'Female',
-      age: 27,
-      height: '160 cm',
-      religion: 'Hindu',
-      caste: 'Pillai',
-      subCaste: 'Saiva Pillai',
-      rasi: 'Rishabham',
-      star: 'Krittika',
-      gothram: 'Siva Gothram',
-      location: 'Madurai',
-      native: 'Tirunelveli',
-      education: 'M.Com Bank Manager',
-      company: 'SBI',
-      income: '₹9,00,000',
-      about: 'Loving, family-centered person. Loves traditional cooking and values relationship boundaries.',
-      familyType: 'Joint',
-      siblings: '1 sister (married)',
-      score: 85,
-      isVerified: true,
-      maritalStatus: 'Never Married'
-    },
-    {
-      id: 'GVV-188',
-      name: 'Divya Mathews',
-      gender: 'Female',
-      age: 29,
-      height: '165 cm',
-      religion: 'Christian',
-      caste: 'Orthodox',
-      subCaste: 'None',
-      rasi: 'N/A',
-      star: 'N/A',
-      gothram: 'N/A',
-      location: 'Bangalore',
-      native: 'Kottayam',
-      education: 'MS Data Scientist',
-      company: 'Microsoft',
-      income: '₹24,00,000',
-      about: 'Calm, nature-loving person. Enjoys research, coding, and trekking. Looking for someone with similar goals.',
-      familyType: 'Nuclear',
-      siblings: '1 younger sister',
-      score: 80,
-      isVerified: true,
-      maritalStatus: 'Never Married'
-    }
-  ];
+  // Live profiles state fetched from database
+  const [allProfiles, setAllProfiles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadProfiles = async () => {
+      setLoading(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUserId(user.id);
+          
+          // Load existing shortlist favorites
+          const { data: favs } = await supabase
+            .from('favorites')
+            .select('favorite_user_id')
+            .eq('user_id', user.id);
+          if (favs) {
+            const shortlistMap: Record<string, boolean> = {};
+            favs.forEach(f => {
+              shortlistMap[f.favorite_user_id] = true;
+            });
+            setShortlisted(shortlistMap);
+          }
+        }
+
+        const { data } = await matchService.getMatches();
+        if (data) {
+          setAllProfiles(data);
+        }
+      } catch (err) {
+        console.error('Failed to load profiles:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadProfiles();
+  }, []);
+
 
   // Filtering Logic
   const filteredProfiles = allProfiles.filter((profile) => {
@@ -243,16 +113,56 @@ function MatchesContent() {
     return true;
   });
 
-  const toggleShortlist = (id: string, name: string) => {
-    setShortlisted(prev => {
-      const updated = { ...prev, [id]: !prev[id] };
-      alert(updated[id] ? `Added ${name} to Shortlist!` : `Removed ${name} from Shortlist.`);
-      return updated;
-    });
+  const toggleShortlist = async (id: string, name: string) => {
+    if (!currentUserId) return;
+    
+    // Find profile corresponding to the match ID to get user_id
+    const targetProfile = allProfiles.find(p => p.id === id);
+    const targetUserId = targetProfile?.user_id || id;
+    const isCurrentlyShortlisted = shortlisted[id];
+
+    try {
+      if (isCurrentlyShortlisted) {
+        await supabase
+          .from('favorites')
+          .delete()
+          .eq('user_id', currentUserId)
+          .eq('favorite_user_id', targetUserId);
+        
+        setShortlisted(prev => ({ ...prev, [id]: false }));
+        alert(`Removed ${name} from Shortlist.`);
+      } else {
+        await supabase
+          .from('favorites')
+          .insert({
+            user_id: currentUserId,
+            favorite_user_id: targetUserId
+          });
+
+        setShortlisted(prev => ({ ...prev, [id]: true }));
+        alert(`Added ${name} to Shortlist!`);
+      }
+    } catch (e: any) {
+      console.error('Error toggling shortlist:', e);
+    }
   };
 
-  const handleBlockUser = (name: string) => {
+  const handleBlockUser = async (name: string) => {
     alert(`User ${name} has been reported. Admins will review this within 12 hours.`);
+  };
+
+  const handleConnect = async (profile: any) => {
+    try {
+      const targetUserId = profile.user_id || profile.id;
+      const { error } = await matchService.sendRequest(targetUserId);
+      if (error) {
+        alert('Failed to send connection request: ' + error.message);
+      } else {
+        alert(`Connection request sent to ${profile.name}!`);
+      }
+    } catch (e: any) {
+      alert('Error: ' + e.message);
+    }
   };
 
   return (
@@ -377,7 +287,7 @@ function MatchesContent() {
 
                     {/* Connect Trigger */}
                     <button
-                      onClick={() => alert(`Connection request sent to ${profile.name}!`)}
+                      onClick={() => handleConnect(profile)}
                       className="flex-1 py-2 rounded-lg luxury-gradient text-white text-xs font-semibold hover:opacity-90 shadow transition-all cursor-pointer"
                     >
                       Connect
@@ -507,7 +417,7 @@ function MatchesContent() {
                 </a>
 
                 <button
-                  onClick={() => { alert(`Connection interest sent!`); setActiveProfile(null); }}
+                  onClick={() => { handleConnect(activeProfile); setActiveProfile(null); }}
                   className="px-5 py-2 rounded-full luxury-gradient text-white text-xs font-bold uppercase tracking-widest hover:opacity-90 shadow-md transition-all cursor-pointer"
                 >
                   Send Match Interest

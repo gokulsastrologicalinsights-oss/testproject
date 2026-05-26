@@ -1,85 +1,122 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   Heart, Users, Check, X, ShieldAlert, Sparkles, 
   ArrowRight, FileText, CheckCircle2, Star, Eye
 } from 'lucide-react';
 import DashboardStats from '@/components/dashboard/DashboardStats';
+import { supabase } from '@/lib/supabase';
+import { matchService } from '@/services/match.service';
 
 export default function UserDashboard() {
   
-  // Profile completion checklist
+  const [userName, setUserName] = useState('Member');
   const [checklist, setChecklist] = useState([
-    { id: 1, name: 'Verify Phone Number', completed: true },
-    { id: 2, name: 'Add Profile Photo', completed: true },
+    { id: 1, name: 'Verify Phone Number', completed: false, action: 'Verify' },
+    { id: 2, name: 'Add Profile Photo', completed: false, action: 'Add' },
     { id: 3, name: 'Upload Horoscope File', completed: false, action: 'Upload' },
-    { id: 4, name: 'Define Partner Expectations', completed: true },
+    { id: 4, name: 'Define Partner Expectations', completed: false, action: 'Add' },
     { id: 5, name: 'Add Family Native Details', completed: false, action: 'Add' }
   ]);
+  const [matches, setMatches] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Calculations for profile completeness
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // 1. Fetch Profile details and files
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (profile) {
+          setUserName(profile.first_name || 'Member');
+          
+          // Query photo
+          const { data: photo } = await supabase
+            .from('gallery_images')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('is_profile_picture', true)
+            .limit(1)
+            .maybeSingle();
+          
+          // Query horoscope
+          const { data: horoscope } = await supabase
+            .from('horoscope_uploads')
+            .select('id')
+            .eq('user_id', user.id)
+            .limit(1)
+            .maybeSingle();
+
+          setChecklist([
+            { id: 1, name: 'Verify Phone Number', completed: !!profile.mobile_number || true, action: 'Verify' }, // Mocked phone verification as always true for demo ease
+            { id: 2, name: 'Add Profile Photo', completed: !!photo, action: 'Add' },
+            { id: 3, name: 'Upload Horoscope File', completed: !!horoscope, action: 'Upload' },
+            { id: 4, name: 'Define Partner Expectations', completed: !!profile.partner_expectations, action: 'Add' },
+            { id: 5, name: 'Add Family Native Details', completed: !!profile.native_place, action: 'Add' }
+          ]);
+        }
+
+        // 2. Fetch pending requests
+        const { data: pendingRequests } = await matchService.getPendingRequests();
+        if (pendingRequests) {
+          setRequests(pendingRequests);
+        }
+
+        // 3. Fetch match recommendations
+        const { data: recommendations } = await matchService.getMatches();
+        if (recommendations) {
+          setMatches(recommendations.slice(0, 3));
+        }
+
+      } catch (err) {
+        console.error('Error loading dashboard:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadDashboardData();
+  }, []);
+
+  const handleAcceptRequest = async (id: string, name: string) => {
+    try {
+      const { error } = await matchService.respondToRequest(id, 'accepted');
+      if (error) {
+        alert('Failed to accept connection: ' + error.message);
+      } else {
+        setRequests(prev => prev.filter(r => r.id !== id));
+        alert(`Accepted match connection request from ${name}! Connect over WhatsApp unlocked.`);
+      }
+    } catch (e: any) {
+      alert('Error: ' + e.message);
+    }
+  };
+
+  const handleDeclineRequest = async (id: string, name: string) => {
+    try {
+      const { error } = await matchService.respondToRequest(id, 'declined');
+      if (error) {
+        alert('Failed to decline request: ' + error.message);
+      } else {
+        setRequests(prev => prev.filter(r => r.id !== id));
+        alert(`Declined connection request from ${name}.`);
+      }
+    } catch (e: any) {
+      alert('Error: ' + e.message);
+    }
+  };
+
   const completedCount = checklist.filter(item => item.completed).length;
   const completionPercentage = Math.round((completedCount / checklist.length) * 100);
-
-  // Recommendations Grid
-  const [matches, setMatches] = useState([
-    {
-      id: 'GVV-089',
-      name: 'Gokulakrishnan M.',
-      age: 28,
-      height: '178 cm',
-      education: 'MBA Project Manager',
-      location: 'Bangalore',
-      rasi: 'Dhanusu',
-      star: 'Pooradam',
-      caste: 'Iyer (Vadama)',
-      score: 95,
-      isPremium: true
-    },
-    {
-      id: 'GVV-045',
-      name: 'Venkatesh S.',
-      age: 30,
-      height: '174 cm',
-      education: 'MS Architect',
-      location: 'Chennai',
-      rasi: 'Mesham',
-      star: 'Aswini',
-      caste: 'Iyer (Vadama)',
-      score: 88,
-      isPremium: false
-    },
-    {
-      id: 'GVV-112',
-      name: 'Karthik N.',
-      age: 27,
-      height: '180 cm',
-      education: 'B.Tech Tech Lead',
-      location: 'Singapore',
-      rasi: 'Simham',
-      star: 'Pooram',
-      caste: 'Iyer (Brahacharanam)',
-      score: 91,
-      isPremium: true
-    }
-  ]);
-
-  // Match Requests Received
-  const [requests, setRequests] = useState([
-    { id: 101, name: 'Pranesh Kumar', age: 29, education: 'Doctor (MD)', location: 'Coimbatore', star: 'Uthiradam', score: 85 }
-  ]);
-
-  const handleAcceptRequest = (id: number, name: string) => {
-    setRequests(prev => prev.filter(r => r.id !== id));
-    alert(`Accepted match connection request from ${name}! Connect over WhatsApp unlocked.`);
-  };
-
-  const handleDeclineRequest = (id: number, name: string) => {
-    setRequests(prev => prev.filter(r => r.id !== id));
-    alert(`Declined connection request from ${name}.`);
-  };
 
   return (
     <div className="flex flex-col gap-6 text-left">
@@ -88,7 +125,7 @@ export default function UserDashboard() {
       <div className="p-6 md:p-8 rounded-3xl bg-gradient-to-r from-sandal-100/60 to-gold-50/20 dark:from-zinc-900/60 dark:to-zinc-900/10 border border-sandal-200 dark:border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl md:text-3xl font-serif font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
-            Welcome Back, Revathi! <Sparkles className="h-5 w-5 text-gold-500 fill-gold-500 animate-pulse" />
+            Welcome Back, {userName}! <Sparkles className="h-5 w-5 text-gold-500 fill-gold-500 animate-pulse" />
           </h1>
           <p className="text-sm text-zinc-650 dark:text-zinc-400 font-light">
             You have <span className="font-semibold text-maroon-600 dark:text-gold-400">3 new matches</span> recommended based on your preferences today.

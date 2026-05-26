@@ -8,6 +8,14 @@ import {
   Terminal, ArrowRight, Server, Radio
 } from 'lucide-react';
 
+import { supabase } from '@/lib/supabase';
+
+const isMockMode = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  return !url || url.includes('placeholder') || !key || key.includes('placeholder');
+};
+
 export default function AdminLogin() {
   const router = useRouter();
   
@@ -34,7 +42,7 @@ export default function AdminLogin() {
     setConsoleLogs(prev => [...prev.slice(-3), `SYS: ${msg}`]);
   };
 
-  const handleInitialSubmit = (e: React.FormEvent) => {
+  const handleInitialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       setErrorMessage('Admin credentials required.');
@@ -45,19 +53,56 @@ export default function AdminLogin() {
     setLoading(true);
     setErrorMessage('');
     
-    // Simulate credential verification
-    setTimeout(() => {
-      if (email === 'admin@gokul.com' && password === 'admin123') {
-        setTwoFactorRequired(true);
-        setSuccessMessage('Credentials approved. 2FA Code required.');
-        addLog('AUTH_OK: Awaiting 2FA token...');
-        alert('Mock 2FA Code: Enter 8888');
-      } else {
-        setErrorMessage('Invalid admin credentials. (Tip: Use admin@gokul.com / admin123)');
-        addLog('AUTH_FAIL: Bad signature match.');
+    try {
+      if (isMockMode()) {
+        // Fallback mock check
+        if (email === 'admin@gokul.com' && password === 'admin123') {
+          setTwoFactorRequired(true);
+          setSuccessMessage('Credentials approved. 2FA Code required.');
+          addLog('AUTH_OK: Awaiting 2FA token...');
+          alert('Mock 2FA Code: Enter 8888');
+        } else {
+          setErrorMessage('Invalid admin credentials. (Tip: Use admin@gokul.com / admin123)');
+          addLog('AUTH_FAIL: Bad signature match.');
+        }
+        setLoading(false);
+        return;
       }
+
+      // Supabase auth sign-in
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        setErrorMessage(error.message);
+        addLog(`AUTH_FAIL: ${error.message}`);
+        setLoading(false);
+        return;
+      }
+
+      // Query admin_users to see if authorized
+      const { data: adminUser, error: adminErr } = await supabase
+        .from('admin_users')
+        .select('*')
+        .eq('auth_user_id', data.user?.id)
+        .maybeSingle();
+
+      if (adminErr || !adminUser) {
+        await supabase.auth.signOut();
+        setErrorMessage('Access denied: You are not authorized as an administrator.');
+        addLog('AUTH_FAIL: Not in admin_users list.');
+        setLoading(false);
+        return;
+      }
+
+      setTwoFactorRequired(true);
+      setSuccessMessage('Admin credentials verified. Enter 2FA Code.');
+      addLog('AUTH_OK: Awaiting 2FA verification.');
+      alert('Mock 2FA Code: Enter 8888');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'An unexpected error occurred.');
+      addLog('AUTH_FAIL: Server exception.');
+    } finally {
       setLoading(false);
-    }, 1200);
+    }
   };
 
   const handleTwoFactorSubmit = (e: React.FormEvent) => {

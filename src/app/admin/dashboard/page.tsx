@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   Users, UserCheck, Star, ShieldAlert, FileSpreadsheet, 
   DollarSign, Check, X, Search, Bell, LogOut, ShieldCheck 
 } from 'lucide-react';
+import { adminService } from '@/services/admin.service';
 
 export default function AdminDashboard() {
   
@@ -20,42 +21,67 @@ export default function AdminDashboard() {
     revenueThisMonth: 148500
   });
 
-  // Mock Registrations Queue
-  const [pendingUsers, setPendingUsers] = useState([
-    { id: 1, name: 'Srinivasan K.', age: 27, gender: 'Male', caste: 'Iyer', location: 'Chennai', date: '2 hours ago' },
-    { id: 2, name: 'Meenakshi N.', age: 24, gender: 'Female', caste: 'Pillai', location: 'Madurai', date: '4 hours ago' },
-    { id: 3, name: 'Balaji R.', age: 29, gender: 'Male', caste: 'Naidu', location: 'Bangalore', date: '1 day ago' },
-    { id: 4, name: 'Gayathri S.', age: 25, gender: 'Female', caste: 'Chettiar', location: 'Coimbatore', date: '1 day ago' }
-  ]);
+  // Registrations Queue
+  const [pendingUsers, setPendingUsers] = useState<any[]>([]);
 
-  // Mock Horoscope Queue
-  const [pendingHoroscopes, setPendingHoroscopes] = useState([
-    { id: 101, name: 'Venkatesh Prasad', star: 'Aswini', rasi: 'Mesham', url: '#', date: '5 hours ago' },
-    { id: 102, name: 'Anitha Gopalan', star: 'Krittika', rasi: 'Rishabham', url: '#', date: '1 day ago' }
-  ]);
+  // Horoscope Queue
+  const [pendingHoroscopes, setPendingHoroscopes] = useState<any[]>([]);
 
   // Search State
   const [searchTerm, setSearchTerm] = useState('');
 
   // Transactions State
-  const [transactions] = useState([
-    { id: 'TXN10023', user: 'Ramesh Sundar', plan: 'Gold Elite', date: 'May 24, 2026', amount: '₹4,999', status: 'Completed' },
-    { id: 'TXN10022', user: 'Lakshmi Narayanan', plan: 'Diamond Premium', date: 'May 23, 2026', amount: '₹8,999', status: 'Completed' },
-    { id: 'TXN10021', user: 'Vijay Kumar', plan: 'Gold Elite', date: 'May 23, 2026', amount: '₹4,999', status: 'Completed' }
-  ]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAdminData = async () => {
+      setLoading(true);
+      try {
+        const [statsRes, profilesRes, horoscopesRes, txnsRes] = await Promise.all([
+          adminService.getAdminStats(),
+          adminService.getPendingProfiles(),
+          adminService.getPendingHoroscopes(),
+          adminService.getTransactions()
+        ]);
+
+        if (statsRes.data) setStats(statsRes.data);
+        if (profilesRes.data) setPendingUsers(profilesRes.data);
+        if (horoscopesRes.data) setPendingHoroscopes(horoscopesRes.data);
+        if (txnsRes.data) setTransactions(txnsRes.data);
+      } catch (err) {
+        console.error('Error loading admin dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAdminData();
+  }, []);
 
   // Actions
-  const handleApproveUser = (id: number, name: string) => {
-    setPendingUsers(prev => prev.filter(u => u.id !== id));
-    setStats(prev => ({
-      ...prev,
-      totalUsers: prev.totalUsers + 1,
-      pendingApprovals: Math.max(0, prev.pendingApprovals - 1)
-    }));
-    alert(`Approved Profile: ${name}`);
+  const handleApproveUser = async (user: any) => {
+    const identifier = user.user_id || user.id;
+    try {
+      const { error } = await adminService.approveProfile(identifier);
+      if (error) {
+        alert('Failed to approve profile: ' + error.message);
+        return;
+      }
+      setPendingUsers(prev => prev.filter(u => u.id !== user.id));
+      setStats(prev => ({
+        ...prev,
+        totalUsers: prev.totalUsers + 1,
+        pendingApprovals: Math.max(0, prev.pendingApprovals - 1)
+      }));
+      alert(`Approved Profile: ${user.name}`);
+    } catch (e: any) {
+      alert('Error approving user: ' + e.message);
+    }
   };
 
-  const handleRejectUser = (id: number, name: string) => {
+  const handleRejectUser = (id: any, name: string) => {
     setPendingUsers(prev => prev.filter(u => u.id !== id));
     setStats(prev => ({
       ...prev,
@@ -64,13 +90,22 @@ export default function AdminDashboard() {
     alert(`Rejected Profile: ${name}`);
   };
 
-  const handleVerifyHoroscope = (id: number, name: string) => {
-    setPendingHoroscopes(prev => prev.filter(h => h.id !== id));
-    setStats(prev => ({
-      ...prev,
-      horoscopesPending: Math.max(0, prev.horoscopesPending - 1)
-    }));
-    alert(`Horoscope Verified for: ${name}`);
+  const handleVerifyHoroscope = async (id: any, name: string) => {
+    try {
+      const { success, error } = await adminService.verifyHoroscope(id);
+      if (error || !success) {
+        alert('Failed to verify horoscope: ' + (error?.message || 'unknown error'));
+        return;
+      }
+      setPendingHoroscopes(prev => prev.filter(h => h.id !== id));
+      setStats(prev => ({
+        ...prev,
+        horoscopesPending: Math.max(0, prev.horoscopesPending - 1)
+      }));
+      alert(`Horoscope Verified for: ${name}`);
+    } catch (e: any) {
+      alert('Error verifying horoscope: ' + e.message);
+    }
   };
 
   return (
@@ -219,7 +254,7 @@ export default function AdminDashboard() {
                           <X className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleApproveUser(user.id, user.name)}
+                          onClick={() => handleApproveUser(user)}
                           className="flex items-center gap-1 px-3 h-8.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-zinc-950 font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer text-white"
                           title="Approve Account"
                         >

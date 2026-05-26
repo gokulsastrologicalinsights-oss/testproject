@@ -441,6 +441,35 @@ using (
 );
 
 
+-- RLS POLICIES FOR OTHER TABLES
+create policy "Users can view own user row" on users for select using (auth.uid() = auth_user_id);
+create policy "Users can insert own user row" on users for insert with check (auth.uid() = auth_user_id);
+create policy "Users can update own user row" on users for update using (auth.uid() = auth_user_id);
+
+create policy "Users can view own preferences" on partner_preferences for select using (auth.uid() = user_id);
+create policy "Users can insert own preferences" on partner_preferences for insert with check (auth.uid() = user_id);
+create policy "Users can update own preferences" on partner_preferences for update using (auth.uid() = user_id);
+
+create policy "Users can view own horoscope" on horoscope_uploads for select using (auth.uid() = user_id);
+create policy "Users can insert own horoscope" on horoscope_uploads for insert with check (auth.uid() = user_id);
+
+create policy "Users can view own gallery" on gallery_images for select using (auth.uid() = user_id);
+create policy "Users can insert own gallery" on gallery_images for insert with check (auth.uid() = user_id);
+
+create policy "Users can view own match requests" on match_requests for select using (auth.uid() = sender_user_id or auth.uid() = receiver_user_id);
+create policy "Users can insert own match requests" on match_requests for insert with check (auth.uid() = sender_user_id);
+create policy "Users can update own match requests" on match_requests for update using (auth.uid() = sender_user_id or auth.uid() = receiver_user_id);
+
+create policy "Users can view own chats" on chats for select using (auth.uid() = user_one or auth.uid() = user_two);
+create policy "Users can insert own chats" on chats for insert with check (auth.uid() = user_one or auth.uid() = user_two);
+
+create policy "Users can view messages in own chats" on chat_messages for select using (exists (select 1 from chats where chats.id = chat_id and (chats.user_one = auth.uid() or chats.user_two = auth.uid())));
+create policy "Users can insert messages in own chats" on chat_messages for insert with check (sender_id = auth.uid() and exists (select 1 from chats where chats.id = chat_id and (chats.user_one = auth.uid() or chats.user_two = auth.uid())));
+
+create policy "Users can view own notifications" on notifications for select using (auth.uid() = user_id);
+create policy "Users can update own notifications" on notifications for update using (auth.uid() = user_id);
+
+
 -- INDEXING STRATEGY
 create index idx_profiles_gender on profiles(gender);
 create index idx_profiles_rasi on profiles(rasi);

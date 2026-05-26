@@ -1,83 +1,229 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   User, CheckCircle2, Save, FileText, Image as ImageIcon, 
   MapPin, Award, BookOpen, Users 
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { uploadService } from '@/services/upload.service';
 
 export default function Profile() {
   
   // Tab control
   const [activeTab, setActiveTab] = useState<'basic' | 'astro' | 'career' | 'family' | 'photo'>('basic');
 
-  // Fields State (Mocking Revathi's profile)
+  // Fields State
   const [formData, setFormData] = useState({
-    fullName: 'Revathi Murugesan',
-    email: 'revathi.m@gmail.com',
-    mobileNumber: '+91 94432 10892',
-    dob: '2000-04-12',
-    age: '26',
+    fullName: '',
+    email: '',
+    mobileNumber: '',
+    dob: '',
+    age: '',
     maritalStatus: 'Never Married',
     motherTongue: 'Tamil',
     religion: 'Hindu',
-    caste: 'Iyer',
-    subCaste: 'Vadama',
-    star: 'Pooram',
-    rasi: 'Simham',
-    gothram: 'Kasyapa',
-    height: '163',
-    weight: '55',
+    caste: '',
+    subCaste: '',
+    star: '',
+    rasi: '',
+    gothram: '',
+    height: '',
+    weight: '',
     physicalStatus: 'Normal',
-    education: 'B.Tech Computer Science',
-    occupation: 'Software Engineer',
-    companyName: 'Amazon',
-    annualIncome: '₹16,00,000',
-    workLocation: 'Chennai',
-    fatherName: 'Murugesan K.',
-    fatherOccupation: 'Retired Banker',
-    motherName: 'Lalitha Murugesan',
-    motherOccupation: 'Homemaker',
-    siblings: '1 Younger Brother (College Student)',
-    nativePlace: 'Mylapore, Chennai',
+    education: '',
+    occupation: '',
+    companyName: '',
+    annualIncome: '',
+    workLocation: '',
+    fatherName: '',
+    fatherOccupation: '',
+    motherName: '',
+    motherOccupation: '',
+    siblings: '',
+    nativePlace: '',
     familyType: 'Nuclear',
-    aboutMe: 'Traditional at heart with a progressive outlook. Passionate about Classical music, digital designs, and South Indian vegetarian cooking. Seeking an understanding partner who values family relationships and career development.',
-    partnerExpectations: 'Looking for a clean-shaven, vegetarian groom (preferably Iyer/Iyengar) who resides in Chennai/Bangalore. Education should be B.Tech/MS/MBA. Matching rasi/star alignment is desired.'
+    aboutMe: '',
+    partnerExpectations: ''
   });
 
-  // Photo state
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
-
-  // Status states
+  const [userId, setUserId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        setUserId(user.id);
+
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (data) {
+          setFormData({
+            fullName: `${data.first_name || ''} ${data.last_name || ''}`.trim(),
+            email: user.email || '',
+            mobileNumber: data.mobile_number || '',
+            dob: data.date_of_birth || '',
+            age: (data.age || '').toString(),
+            maritalStatus: data.marital_status || 'Never Married',
+            motherTongue: data.mother_tongue || 'Tamil',
+            religion: data.religion || 'Hindu',
+            caste: data.caste || '',
+            subCaste: data.sub_caste || '',
+            star: data.nakshatra || '',
+            rasi: data.rasi || '',
+            gothram: data.gothram || '',
+            height: (data.height_cm || '').toString(),
+            weight: (data.weight_kg || '').toString(),
+            physicalStatus: data.physical_status || 'Normal',
+            education: data.education || '',
+            occupation: data.occupation || '',
+            companyName: data.company_name || '',
+            annualIncome: (data.annual_income || '').toString(),
+            workLocation: data.city || '',
+            fatherName: data.father_name || '',
+            fatherOccupation: data.father_occupation || '',
+            motherName: data.mother_name || '',
+            motherOccupation: data.mother_occupation || '',
+            siblings: data.siblings || '',
+            nativePlace: data.native_place || '',
+            familyType: data.family_type || 'Nuclear',
+            aboutMe: data.about_me || '',
+            partnerExpectations: data.partner_expectations || ''
+          });
+
+          const { data: gallery } = await supabase
+            .from('gallery_images')
+            .select('image_url')
+            .eq('user_id', user.id)
+            .eq('is_profile_picture', true)
+            .limit(1)
+            .maybeSingle();
+
+          if (gallery) {
+            setProfilePhoto(gallery.image_url);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load profile details:', e);
+      }
+    };
+    loadProfile();
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!userId) return;
     setSaving(true);
     setSuccess('');
 
-    setTimeout(() => {
+    try {
+      const parts = formData.fullName.split(' ');
+      const firstName = parts[0] || '';
+      const lastName = parts.slice(1).join(' ') || '';
+
+      const payload = {
+        first_name: firstName,
+        last_name: lastName,
+        date_of_birth: formData.dob || null,
+        age: formData.age ? parseInt(formData.age) : null,
+        marital_status: formData.maritalStatus,
+        mother_tongue: formData.motherTongue,
+        religion: formData.religion,
+        caste: formData.caste,
+        sub_caste: formData.subCaste,
+        nakshatra: formData.star,
+        rasi: formData.rasi,
+        gothram: formData.gothram,
+        height_cm: formData.height ? parseInt(formData.height) : null,
+        weight_kg: formData.weight ? parseInt(formData.weight) : null,
+        physical_status: formData.physicalStatus,
+        education: formData.education,
+        occupation: formData.occupation,
+        company_name: formData.companyName,
+        annual_income: formData.annualIncome ? parseFloat(formData.annualIncome) : null,
+        city: formData.workLocation,
+        father_name: formData.fatherName,
+        father_occupation: formData.fatherOccupation,
+        mother_name: formData.motherName,
+        mother_occupation: formData.motherOccupation,
+        siblings: formData.siblings,
+        native_place: formData.nativePlace,
+        family_type: formData.familyType,
+        about_me: formData.aboutMe,
+        partner_expectations: formData.partnerExpectations
+      };
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(payload)
+        .eq('user_id', userId);
+
+      if (error) {
+        alert('Failed to save profile changes: ' + error.message);
+      } else {
+        setSuccess('Profile updated successfully!');
+        window.scrollTo(0, 0);
+        setTimeout(() => setSuccess(''), 3000);
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
       setSaving(false);
-      setSuccess('Profile updated successfully!');
-      window.scrollTo(0, 0);
-      setTimeout(() => setSuccess(''), 3000);
-    }, 1200);
+    }
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfilePhoto(reader.result as string);
-        alert('Photo uploaded successfully! Awaiting Admin review.');
-      };
-      reader.readAsDataURL(e.target.files[0]);
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0] && userId) {
+      const file = e.target.files[0];
+      try {
+        const { url, error } = await uploadService.uploadFile(file, 'photos');
+        if (error) {
+          alert('Upload failed: ' + error.message);
+          return;
+        }
+
+        if (url) {
+          setProfilePhoto(url);
+          
+          // Delete existing profile photo reference
+          await supabase
+            .from('gallery_images')
+            .delete()
+            .eq('user_id', userId)
+            .eq('is_profile_picture', true);
+
+          // Insert new profile photo reference
+          const { error: galleryErr } = await supabase
+            .from('gallery_images')
+            .insert({
+              user_id: userId,
+              image_url: url,
+              is_profile_picture: true,
+              is_private: false
+            });
+
+          if (galleryErr) {
+            console.error('Gallery insert error:', galleryErr);
+          } else {
+            alert('Photo uploaded successfully! Awaiting Admin review.');
+          }
+        }
+      } catch (err: any) {
+        alert('Error during upload: ' + err.message);
+      }
     }
   };
 

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Save, CheckCircle2, Sliders, Info } from 'lucide-react';
 import TextInput from '@/components/ui/input/TextInput';
 import PrimaryButton from '@/components/ui/button/PrimaryButton';
+import { supabase } from '@/lib/supabase';
 
 export default function PartnerPreferences() {
   
@@ -22,6 +23,41 @@ export default function PartnerPreferences() {
   // Status states
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [userId, setUserId] = useState<string | null>(null);
+  const [hasExisting, setHasExisting] = useState(false);
+
+  useEffect(() => {
+    const loadPreferences = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        setUserId(user.id);
+
+        const { data, error } = await supabase
+          .from('partner_preferences')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (data) {
+          setHasExisting(true);
+          if (data.min_age) setMinAge(data.min_age);
+          if (data.max_age) setMaxAge(data.max_age);
+          if (data.min_height) setMinHeight(data.min_height);
+          if (data.max_height) setMaxHeight(data.max_height);
+          if (data.marital_status) setMaritalStatus(data.marital_status.split(','));
+          if (data.religion) setReligions(data.religion.split(','));
+          if (data.caste) setCastes(data.caste);
+          if (data.mother_tongue) setMotherTongues(data.mother_tongue);
+          if (data.education) setEducations(data.education);
+          if (data.country) setLocations(data.country);
+        }
+      } catch (e) {
+        console.error('Failed to load preferences:', e);
+      }
+    };
+    loadPreferences();
+  }, []);
 
   const toggleMaritalStatus = (status: string) => {
     setMaritalStatus(prev => 
@@ -31,21 +67,54 @@ export default function PartnerPreferences() {
     );
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!userId) return;
     setIsSaving(true);
     setSuccessMessage('');
 
-    setTimeout(() => {
-      setIsSaving(false);
-      setSuccessMessage('Partner preferences saved successfully! Matches are updated based on these rules.');
-      window.scrollTo(0, 0);
+    try {
+      const payload = {
+        user_id: userId,
+        min_age: minAge,
+        max_age: maxAge,
+        min_height: minHeight,
+        max_height: maxHeight,
+        marital_status: maritalStatus.join(','),
+        religion: religions.join(','),
+        caste: castes,
+        mother_tongue: motherTongues,
+        education: educations,
+        country: locations
+      };
 
-      // Clear toast after 4 seconds
-      setTimeout(() => {
-        setSuccessMessage('');
-      }, 4000);
-    }, 1200);
+      let error;
+      if (hasExisting) {
+        const res = await supabase
+          .from('partner_preferences')
+          .update(payload)
+          .eq('user_id', userId);
+        error = res.error;
+      } else {
+        const res = await supabase
+          .from('partner_preferences')
+          .insert(payload);
+        error = res.error;
+        if (!error) setHasExisting(true);
+      }
+
+      if (error) {
+        alert('Failed to save preferences: ' + error.message);
+      } else {
+        setSuccessMessage('Partner preferences saved successfully! Matches are updated based on these rules.');
+        window.scrollTo(0, 0);
+        setTimeout(() => setSuccessMessage(''), 4000);
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const maritalOptions = ['Never Married', 'Widowed', 'Divorced', 'Awaiting Divorce'];
