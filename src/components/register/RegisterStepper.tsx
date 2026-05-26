@@ -10,6 +10,8 @@ import EducationCareerStep from './steps/EducationCareerStep';
 import FamilyDetailsStep from './steps/FamilyDetailsStep';
 import HoroscopeUploadStep from './steps/HoroscopeUploadStep';
 import { authService } from '@/services/auth.service';
+import { profileService } from '@/services/profile.service';
+import { uploadService } from '@/services/upload.service';
 
 
 export default function RegisterStepper() {
@@ -196,21 +198,164 @@ export default function RegisterStepper() {
     setErrors({});
 
     try {
-      const { data, error } = await authService.signUp(formData.email, formData.password, formData.fullName);
+      // 1. Sign up user in Supabase Auth
+      const { data: signUpData, error: signUpError } = await authService.signUp(
+        formData.email,
+        formData.password,
+        formData.fullName
+      );
       
-      if (error) {
-        setErrors(prev => ({ ...prev, termsAccepted: error.message || 'Registration failed.' }));
+      if (signUpError) {
+        setErrors(prev => ({ ...prev, termsAccepted: signUpError.message || 'Registration failed.' }));
         setIsSubmitting(false);
-      } else {
-        localStorage.removeItem('gokul_matrimony_register_draft');
-        setIsRegistered(true);
-        setIsSubmitting(false);
-        
-        setTimeout(() => {
-          router.push('/login');
-        }, 4000);
+        return;
       }
+
+      const authUserId = signUpData?.user?.id;
+      if (!authUserId) {
+        throw new Error('Failed to retrieve user ID from auth registration.');
+      }
+
+      // 2. Upload Files (Horoscope and Profile Photo) to Storage
+      let horoscopeUrl = '';
+      let profilePhotoUrl = '';
+
+      if (horoscopeFile) {
+        const { url, error: uploadErr } = await uploadService.uploadFile(horoscopeFile, 'horoscopes');
+        if (uploadErr) {
+          console.error('Horoscope upload failed:', uploadErr);
+        } else if (url) {
+          horoscopeUrl = url;
+        }
+      }
+
+      if (profilePhoto) {
+        const { url, error: uploadErr } = await uploadService.uploadBase64(profilePhoto, 'photos');
+        if (uploadErr) {
+          console.error('Profile photo upload failed:', uploadErr);
+        } else if (url) {
+          profilePhotoUrl = url;
+        }
+      }
+
+      // 3. Create Custom public.users Row
+      const { data: userRecord, error: userError } = await profileService.createUser({
+        id: authUserId,
+        auth_user_id: authUserId,
+        email: formData.email,
+        mobile_number: formData.mobileNumber
+      });
+
+      if (userError) {
+        console.error('Error creating public user row:', userError);
+        throw new Error(userError.message || 'Failed to create user record.');
+      }
+
+      const publicUserId = userRecord?.id || authUserId;
+
+      // 4. Create public.profiles Row
+      const parts = formData.fullName.split(' ');
+      const firstName = parts[0] || '';
+      const lastName = parts.slice(1).join(' ') || '';
+      const profileId = `GV${Math.floor(100000 + Math.random() * 900000)}`;
+
+      const profilePayload = {
+        user_id: publicUserId,
+        profile_id: profileId,
+        first_name: firstName,
+        last_name: lastName,
+        gender: formData.gender,
+        date_of_birth: formData.dob || null,
+        age: formData.age ? parseInt(formData.age) : null,
+        marital_status: formData.maritalStatus || null,
+        religion: formData.religion || null,
+        caste: formData.caste || null,
+        sub_caste: formData.subCaste || null,
+        mother_tongue: formData.motherTongue || null,
+        rasi: formData.rasi || null,
+        nakshatra: formData.star || null,
+        gothram: formData.gothram || null,
+        height_cm: formData.height ? parseInt(formData.height) : null,
+        weight_kg: formData.weight ? parseInt(formData.weight) : null,
+        physical_status: formData.physicalStatus || null,
+        education: formData.education || null,
+        occupation: formData.occupation || null,
+        company_name: formData.companyName || null,
+        annual_income: formData.annualIncome ? parseFloat(formData.annualIncome) : null,
+        city: formData.workLocation || null,
+        native_place: formData.nativePlace || null,
+        father_name: formData.fatherName || null,
+        father_occupation: formData.fatherOccupation || null,
+        mother_name: formData.motherName || null,
+        mother_occupation: formData.motherOccupation || null,
+        siblings: formData.siblings || null,
+        family_type: formData.familyType || null,
+        about_me: formData.aboutMe || null,
+        partner_expectations: formData.partnerExpectations || null,
+        is_verified: false,
+        is_premium: false,
+        profile_completion: 40
+      };
+
+      const { error: profileError } = await profileService.createProfile(profilePayload);
+      if (profileError) {
+        console.error('Error creating public profile row:', profileError);
+        throw new Error(profileError.message || 'Failed to create profile record.');
+      }
+
+      // 5. Create partner_preferences Row
+      const preferencesPayload = {
+        user_id: publicUserId,
+        min_age: formData.gender === 'Male' ? 18 : 21,
+        max_age: formData.gender === 'Male' ? 35 : 40,
+        religion: formData.religion || null,
+        caste: formData.caste || null,
+        mother_tongue: formData.motherTongue || null
+      };
+
+      const { error: prefError } = await profileService.createPartnerPreferences(preferencesPayload);
+      if (prefError) {
+        console.error('Error creating partner preferences row:', prefError);
+      }
+
+      // 6. Create horoscope_uploads Row (if file URL exists)
+      if (horoscopeUrl) {
+        const horoscopePayload = {
+          user_id: publicUserId,
+          file_url: horoscopeUrl,
+          file_name: horoscopeFile ? horoscopeFile.name : 'horoscope.pdf',
+          file_type: horoscopeFile ? horoscopeFile.type : 'application/pdf'
+        };
+        const { error: horoError } = await profileService.createHoroscopeUpload(horoscopePayload);
+        if (horoError) {
+          console.error('Error creating horoscope upload row:', horoError);
+        }
+      }
+
+      // 7. Create gallery_images Row (if profile photo URL exists)
+      if (profilePhotoUrl) {
+        const galleryPayload = {
+          user_id: publicUserId,
+          image_url: profilePhotoUrl,
+          is_profile_picture: true,
+          is_private: false
+        };
+        const { error: galleryError } = await profileService.createGalleryImage(galleryPayload);
+        if (galleryError) {
+          console.error('Error creating gallery image row:', galleryError);
+        }
+      }
+
+      localStorage.removeItem('gokul_matrimony_register_draft');
+      setIsRegistered(true);
+      setIsSubmitting(false);
+      
+      setTimeout(() => {
+        router.push('/login');
+      }, 4000);
+
     } catch (err: any) {
+      console.error('Registration processing failed:', err);
       setErrors(prev => ({ ...prev, termsAccepted: err.message || 'An unexpected error occurred.' }));
       setIsSubmitting(false);
     }
