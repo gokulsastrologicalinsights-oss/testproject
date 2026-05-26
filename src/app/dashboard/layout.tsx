@@ -17,6 +17,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchSidebarProfile = async () => {
@@ -42,6 +43,19 @@ export default function DashboardLayout({
             is_premium: false,
             is_verified: false
           });
+        }
+
+        // Fetch profile photo
+        const { data: gallery } = await supabase
+          .from('gallery_images')
+          .select('image_url')
+          .eq('user_id', user.id)
+          .eq('is_profile_picture', true)
+          .limit(1)
+          .maybeSingle();
+
+        if (gallery) {
+          setProfilePhoto(gallery.image_url);
         }
       } catch (err) {
         console.error('Error fetching sidebar profile:', err);
@@ -79,9 +93,17 @@ export default function DashboardLayout({
             
             {/* Quick Profile Summary in Sidebar */}
             <div className="flex flex-col items-center text-center gap-3">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-sandal-300 to-rose-100 dark:from-zinc-800 dark:to-maroon-950/20 border-2 border-gold-400 flex items-center justify-center font-serif text-2xl font-bold text-maroon-700 dark:text-gold-400 shadow-sm">
-                {initials}
-              </div>
+              {profilePhoto ? (
+                <img 
+                  src={profilePhoto} 
+                  alt={fullName} 
+                  className="w-20 h-20 rounded-full object-cover border-2 border-gold-400 shadow-sm"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-sandal-300 to-rose-100 dark:from-zinc-800 dark:to-maroon-950/20 border-2 border-gold-400 flex items-center justify-center font-serif text-2xl font-bold text-maroon-700 dark:text-gold-400 shadow-sm">
+                  {initials}
+                </div>
+              )}
               <div className="flex flex-col gap-0.5">
                 <span className="text-base font-serif font-bold text-zinc-900 dark:text-zinc-50 flex items-center justify-center gap-1">
                   {fullName}

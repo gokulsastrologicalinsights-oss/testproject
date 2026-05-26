@@ -10,13 +10,21 @@ export const uploadService = {
   async uploadFile(file: File, bucket: 'horoscopes' | 'photos') {
     try {
       if (isMockMode()) {
-        console.warn(`[Supabase Upload Service] Mock Mode Active. Returning mock URL for ${file.name}`);
-        return { 
-          url: bucket === 'horoscopes' 
-            ? 'https://gokul-vivaham.supabase/mock_horoscope.pdf' 
-            : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200', 
-          error: null 
-        };
+        console.warn(`[Supabase Upload Service] Mock Mode Active. Returning mock URL/data for ${file.name}`);
+        if (bucket === 'horoscopes') {
+          return { 
+            url: 'https://gokul-vivaham.supabase/mock_horoscope.pdf', 
+            error: null 
+          };
+        }
+        
+        // Convert File to base64 for mock local storage persistence
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        return { url: base64, error: null };
       }
 
       const fileExt = file.name.split('.').pop() || 'dat';
@@ -46,9 +54,9 @@ export const uploadService = {
   async uploadBase64(base64Data: string, bucket: 'horoscopes' | 'photos') {
     try {
       if (isMockMode()) {
-        console.warn(`[Supabase Upload Service] Mock Mode Active. Returning mock URL for base64 image.`);
+        console.warn(`[Supabase Upload Service] Mock Mode Active. Returning mock URL/data for base64.`);
         return { 
-          url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200', 
+          url: base64Data, 
           error: null 
         };
       }
