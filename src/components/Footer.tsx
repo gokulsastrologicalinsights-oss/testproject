@@ -123,14 +123,29 @@ export default function Footer() {
 
         <div className="h-px bg-sandal-200 dark:bg-zinc-800 my-8" />
 
-        <div className="flex flex-col md:flex-row items-center justify-between text-xs text-zinc-500 dark:text-zinc-500 gap-4">
-          <div>
-            © {new Date().getFullYear()} Gokul Vivaham Matrimony. All rights reserved.
+        <div className="flex flex-col gap-6">
+          {/* Global Matrimony & Astrology Disclaimer */}
+          <div className="text-[10px] sm:text-xs text-zinc-550 dark:text-zinc-500 font-light leading-relaxed text-center md:text-left bg-sandal-50/50 dark:bg-zinc-900/40 p-4 rounded-xl border border-sandal-200/30 dark:border-zinc-800/50">
+            <span className="font-semibold text-zinc-700 dark:text-zinc-350">Regulatory Matchmaking Disclaimer: </span>
+            Gokul Vivaham acts only as a matchmaking platform and does not guarantee marriage, compatibility, profile authenticity, or relationship outcomes. Astrology and horoscope matching are provided only as traditional guidance. Members are advised to conduct independent checks before finalizing any alliance.
           </div>
-          <div className="flex gap-4">
-            <a href="#" className="hover:underline">Privacy Policy</a>
-            <a href="#" className="hover:underline">Terms & Conditions</a>
-            <a href="#" className="hover:underline">Refund Policy</a>
+
+          <div className="flex flex-col md:flex-row items-center justify-between text-xs text-zinc-500 dark:text-zinc-500 gap-4">
+            <div>
+              © {new Date().getFullYear()} Gokul Vivaham Matrimony. All rights reserved.
+            </div>
+            
+            {/* Legal Pages grid-like footer links */}
+            <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-[11px] font-medium text-zinc-650 dark:text-zinc-450">
+              <Link href="/terms" className="hover:underline hover:text-maroon-700 dark:hover:text-gold-400">Terms &amp; Conditions</Link>
+              <Link href="/privacy-policy" className="hover:underline hover:text-maroon-700 dark:hover:text-gold-400">Privacy Policy</Link>
+              <Link href="/refund-policy" className="hover:underline hover:text-maroon-700 dark:hover:text-gold-400">Refund &amp; Cancellation</Link>
+              <Link href="/cookie-policy" className="hover:underline hover:text-maroon-700 dark:hover:text-gold-400">Cookie Policy</Link>
+              <Link href="/community-guidelines" className="hover:underline hover:text-maroon-700 dark:hover:text-gold-400">Community Guidelines</Link>
+              <Link href="/safety-tips" className="hover:underline hover:text-maroon-700 dark:hover:text-gold-400">Safety Tips</Link>
+              <Link href="/verification-policy" className="hover:underline hover:text-maroon-700 dark:hover:text-gold-400">Verification Policy</Link>
+              <Link href="/data-deletion" className="hover:underline hover:text-maroon-700 dark:hover:text-gold-400">Data Deletion</Link>
+            </div>
           </div>
         </div>
       </div>

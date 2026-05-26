@@ -14,6 +14,62 @@ export default function DashboardProfilePage() {
   const [loading, setLoading] = useState(true);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
+  const handleExportData = () => {
+    if (!profile) return;
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+      profile: profile,
+      exported_at: new Date().toISOString(),
+      platform: "Gokul Vivaham Matrimony"
+    }, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `gokul_vivaham_data_${profile.profile_id}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const handleDeleteAccountRequest = async () => {
+    const confirmDelete = confirm("Are you sure you want to request account deactivation and deletion? Your profile will be hidden immediately and deleted after 30 days.");
+    if (!confirmDelete) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error: reqErr } = await supabase
+        .from('deletion_requests')
+        .insert({
+          user_id: user.id,
+          status: 'pending',
+          is_permanent: true
+        });
+
+      if (reqErr) {
+        alert("Failed to submit deletion request: " + reqErr.message);
+        return;
+      }
+
+      const { error: profErr } = await supabase
+        .from('profiles')
+        .update({
+          is_suspended: true,
+          suspended_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id);
+
+      if (profErr) {
+        console.error("Failed to suspend profile:", profErr);
+      }
+
+      alert("Deactivation request successfully submitted. You will be logged out. Re-login within 30 days to cancel this request.");
+      await supabase.auth.signOut();
+      window.location.href = '/login';
+    } catch (e: any) {
+      alert("Error: " + e.message);
+    }
+  };
+
   useEffect(() => {
     const fetchUserProfile = async () => {
       setLoading(true);
@@ -252,16 +308,14 @@ export default function DashboardProfilePage() {
             </p>
           </div>
 
-        </div>
-
-        {/* Right Side: Astrology details */}
+                {/* Right Side: Astrology details */}
         <div className="lg:col-span-4 flex flex-col gap-6">
           <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl shadow-md border border-sandal-200 dark:border-zinc-800/80 text-left flex flex-col gap-4">
             <span className="text-xs font-bold text-maroon-600 dark:text-gold-400 uppercase tracking-widest flex items-center gap-1">
               <Award className="h-4 w-4 shrink-0" /> Horoscopic Details
             </span>
             
-            <div className="flex flex-col gap-2.5 text-xs font-light text-zinc-600 dark:text-zinc-400">
+            <div className="flex flex-col gap-2.5 text-xs font-light text-zinc-655 dark:text-zinc-400">
               <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
                 <span className="font-semibold text-zinc-855 dark:text-zinc-200">Rasi:</span>
                 <span>{profile.rasi || 'N/A'}</span>
@@ -276,7 +330,31 @@ export default function DashboardProfilePage() {
               </div>
             </div>
           </div>
-        </div>
+
+          {/* Privacy Controls (DPDP Readiness) */}
+          <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl shadow-md border border-sandal-200 dark:border-zinc-800/80 text-left flex flex-col gap-4 animate-in slide-in-from-bottom-5 duration-300">
+            <span className="text-xs font-bold text-maroon-600 dark:text-gold-400 uppercase tracking-widest flex items-center gap-1.5">
+              <ShieldCheck className="h-4.5 w-4.5 shrink-0 text-emerald-600" /> Data Privacy Tools
+            </span>
+            <p className="text-[11px] font-light text-zinc-550 dark:text-zinc-450 leading-relaxed">
+              Manage your personal logs, request copies of your files, or revoke consents in compliance with data protection laws.
+            </p>
+            <div className="flex flex-col gap-2 mt-1">
+              <button
+                onClick={handleExportData}
+                className="w-full py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-center text-xs font-bold text-zinc-650 dark:text-zinc-355 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                Export My Data (JSON)
+              </button>
+              <button
+                onClick={handleDeleteAccountRequest}
+                className="w-full py-2 rounded-lg border border-red-500/10 hover:bg-red-500/5 text-center text-xs font-bold text-red-500 transition-colors cursor-pointer"
+              >
+                Delete Matrimony Account
+              </button>
+            </div>
+          </div>
+        </div>  </div>
 
       </div>
 

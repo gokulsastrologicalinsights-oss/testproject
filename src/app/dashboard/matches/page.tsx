@@ -174,8 +174,13 @@ function MatchesContent() {
           Find Your Perfect Match
         </h1>
         <p className="text-xs text-zinc-500 dark:text-zinc-400 font-light">
-          Use filters to isolate horoscope compatibility, location coordinates, and community preferences.
+          Filter matching profiles using traditional compatibility guidance, location parameters, and community standards.
         </p>
+        
+        {/* Compliance Matching Warning Banner */}
+        <div className="p-3 text-[10px] md:text-xs bg-sandal-50/50 dark:bg-zinc-900/60 border border-sandal-200/50 dark:border-zinc-800/80 rounded-xl text-zinc-500 dark:text-zinc-450 leading-relaxed italic">
+          Disclaimer: Horoscope compatibility is based on traditional astrological systems and should not be treated as absolute certainty or professional legal/medical advice.
+        </div>
       </div>
 
       {/* FILTER & MATCHES GRID */}
@@ -238,7 +243,7 @@ function MatchesContent() {
                     )}
 
                     <div className="absolute bottom-2.5 right-2.5 px-2.5 py-0.5 rounded bg-white/95 dark:bg-zinc-900/95 text-xs font-semibold text-maroon-700 dark:text-gold-400">
-                      {profile.score}% Compatibility
+                      {profile.score}% Indicative Compatibility
                     </div>
                   </div>
 
@@ -319,7 +324,7 @@ function MatchesContent() {
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl font-serif font-bold text-zinc-900 dark:text-zinc-50">{activeProfile.name}</h2>
                   <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center gap-0.5">
-                    {activeProfile.score}% Match
+                    {activeProfile.score}% Traditional Guidance Score
                   </span>
                 </div>
                 <span className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">ID: {activeProfile.id} • Verified Profile</span>

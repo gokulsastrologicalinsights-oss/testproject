@@ -12,6 +12,7 @@ import HoroscopeUploadStep from './steps/HoroscopeUploadStep';
 import { authService } from '@/services/auth.service';
 import { profileService } from '@/services/profile.service';
 import { uploadService } from '@/services/upload.service';
+import { supabase } from '@/lib/supabase';
 
 
 export default function RegisterStepper() {
@@ -21,6 +22,12 @@ export default function RegisterStepper() {
   const totalSteps = 5;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
+
+  // Compliance Consent States
+  const [consentEligibility, setConsentEligibility] = useState(false);
+  const [consentTermsPrivacy, setConsentTermsPrivacy] = useState(false);
+  const [consentProcessing, setConsentProcessing] = useState(false);
+  const [consentAccuracy, setConsentAccuracy] = useState(false);
 
   // Form Fields State
   const [formData, setFormData] = useState({
@@ -189,8 +196,8 @@ export default function RegisterStepper() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.termsAccepted) {
-      setErrors(prev => ({ ...prev, termsAccepted: 'You must accept the terms and conditions' }));
+    if (!consentEligibility || !consentTermsPrivacy || !consentProcessing || !consentAccuracy) {
+      setErrors(prev => ({ ...prev, termsAccepted: 'You must accept all regulatory terms and consents to proceed.' }));
       return;
     }
 
@@ -252,6 +259,41 @@ export default function RegisterStepper() {
       }
 
       const publicUserId = userRecord?.id || authUserId;
+
+      // Log consents for DPDP Act Compliance
+      let clientIp = '127.0.0.1';
+      try {
+        const ipRes = await fetch('https://api.ipify.org?format=json').then(r => r.json());
+        if (ipRes && ipRes.ip) {
+          clientIp = ipRes.ip;
+        }
+      } catch (ipErr) {
+        console.warn('Could not fetch client IP, using fallback:', ipErr);
+      }
+
+      const consents = [
+        { type: 'eligibility', val: consentEligibility },
+        { type: 'terms_privacy', val: consentTermsPrivacy },
+        { type: 'data_processing', val: consentProcessing },
+        { type: 'info_accuracy', val: consentAccuracy }
+      ];
+
+      for (const item of consents) {
+        const { error: consentErr } = await supabase
+          .from('consent_logs')
+          .insert({
+            user_id: publicUserId,
+            consent_type: item.type,
+            accepted: item.val,
+            policy_version: '1.0',
+            ip_address: clientIp,
+            device_metadata: typeof navigator !== 'undefined' ? navigator.userAgent : 'Server-side/Unknown'
+          });
+        
+        if (consentErr) {
+          console.error(`Consent log failed for ${item.type}:`, consentErr);
+        }
+      }
 
       // 4. Create public.profiles Row
       const parts = formData.fullName.split(' ');
@@ -488,15 +530,70 @@ export default function RegisterStepper() {
               )}
 
               {currentStep === 5 && (
-                <HoroscopeUploadStep
-                  formData={formData}
-                  handleChange={handleChange}
-                  errors={errors}
-                  horoscopeFile={horoscopeFile}
-                  setHoroscopeFile={setHoroscopeFile}
-                  profilePhoto={profilePhoto}
-                  setProfilePhoto={setProfilePhoto}
-                />
+                <div className="flex flex-col gap-6 text-left">
+                  <HoroscopeUploadStep
+                    formData={formData}
+                    handleChange={handleChange}
+                    errors={errors}
+                    horoscopeFile={horoscopeFile}
+                    setHoroscopeFile={setHoroscopeFile}
+                    profilePhoto={profilePhoto}
+                    setProfilePhoto={setProfilePhoto}
+                  />
+
+                  {/* Required Compliance & Consents */}
+                  <div className="flex flex-col gap-4 p-5 md:p-6 rounded-2xl bg-sandal-50/50 dark:bg-zinc-950/40 border border-sandal-200/50 dark:border-zinc-800/80 text-xs font-light text-zinc-650 dark:text-zinc-400 mt-4 animate-in fade-in duration-300">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200 mb-1 block uppercase tracking-wider text-[10px] text-maroon-700 dark:text-gold-450">
+                      Required Compliance Checkbox Consents
+                    </span>
+                    
+                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={consentEligibility}
+                        onChange={(e) => setConsentEligibility(e.target.checked)}
+                        className="h-4.5 w-4.5 rounded border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-maroon-600 focus:ring-0 accent-maroon-600 shrink-0 mt-0.5"
+                      />
+                      <span>I confirm I am legally eligible for marriage under Indian law (18+ years for female, 21+ years for male).</span>
+                    </label>
+
+                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={consentTermsPrivacy}
+                        onChange={(e) => setConsentTermsPrivacy(e.target.checked)}
+                        className="h-4.5 w-4.5 rounded border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-maroon-600 focus:ring-0 accent-maroon-600 shrink-0 mt-0.5"
+                      />
+                      <span>I agree to the <Link href="/terms" target="_blank" className="text-maroon-700 dark:text-gold-400 hover:underline font-semibold">Terms &amp; Conditions</Link> and <Link href="/privacy-policy" target="_blank" className="text-maroon-700 dark:text-gold-400 hover:underline font-semibold">Privacy Policy</Link> of the platform.</span>
+                    </label>
+
+                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={consentProcessing}
+                        onChange={(e) => setConsentProcessing(e.target.checked)}
+                        className="h-4.5 w-4.5 rounded border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-maroon-600 focus:ring-0 accent-maroon-600 shrink-0 mt-0.5"
+                      />
+                      <span>I consent to storing and processing my personal, astrological, and family information for matchmaking purposes.</span>
+                    </label>
+
+                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={consentAccuracy}
+                        onChange={(e) => setConsentAccuracy(e.target.checked)}
+                        className="h-4.5 w-4.5 rounded border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-maroon-600 focus:ring-0 accent-maroon-600 shrink-0 mt-0.5"
+                      />
+                      <span>I confirm the information provided in this profile is accurate, current, and true.</span>
+                    </label>
+
+                    {errors.termsAccepted && (
+                      <span className="text-xs text-red-500 font-semibold mt-1 block font-mono">
+                        [ERROR] {errors.termsAccepted}
+                      </span>
+                    )}
+                  </div>
+                </div>
               )}
 
               {/* NAVIGATION BUTTONS */}

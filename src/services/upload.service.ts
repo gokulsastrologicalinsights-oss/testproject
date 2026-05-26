@@ -9,6 +9,25 @@ const isMockMode = () => {
 export const uploadService = {
   async uploadFile(file: File, bucket: 'horoscopes' | 'photos') {
     try {
+      // 1. File size validation (< 5MB)
+      const maxSizeBytes = 5 * 1024 * 1024;
+      if (file.size > maxSizeBytes) {
+        throw new Error('File size exceeds the 5MB safety limit.');
+      }
+
+      // 2. MIME type validation
+      if (bucket === 'photos') {
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+          throw new Error('Invalid file type. Only JPEG, PNG, and WebP images are permitted.');
+        }
+      } else if (bucket === 'horoscopes') {
+        const allowedTypes = ['application/pdf'];
+        if (!allowedTypes.includes(file.type)) {
+          throw new Error('Invalid file type. Only PDF documents are permitted for horoscopes.');
+        }
+      }
+
       if (isMockMode()) {
         console.warn(`[Supabase Upload Service] Mock Mode Active. Returning mock URL/data for ${file.name}`);
         if (bucket === 'horoscopes') {
@@ -53,6 +72,33 @@ export const uploadService = {
 
   async uploadBase64(base64Data: string, bucket: 'horoscopes' | 'photos') {
     try {
+      const parts = base64Data.split(';base64,');
+      if (parts.length < 2) {
+        throw new Error('Invalid base64 string format');
+      }
+      
+      const contentType = parts[0].split(':')[1];
+
+      // 1. File size validation (< 5MB)
+      const approxSizeBytes = base64Data.length * 0.75;
+      const maxSizeBytes = 5 * 1024 * 1024;
+      if (approxSizeBytes > maxSizeBytes) {
+        throw new Error('Base64 data size exceeds the 5MB safety limit.');
+      }
+
+      // 2. MIME type validation
+      if (bucket === 'photos') {
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowedTypes.includes(contentType)) {
+          throw new Error('Invalid file type. Only JPEG, PNG, and WebP images are permitted.');
+        }
+      } else if (bucket === 'horoscopes') {
+        const allowedTypes = ['application/pdf'];
+        if (!allowedTypes.includes(contentType)) {
+          throw new Error('Invalid file type. Only PDF documents are permitted for horoscopes.');
+        }
+      }
+
       if (isMockMode()) {
         console.warn(`[Supabase Upload Service] Mock Mode Active. Returning mock URL/data for base64.`);
         return { 
@@ -60,13 +106,7 @@ export const uploadService = {
           error: null 
         };
       }
-
-      const parts = base64Data.split(';base64,');
-      if (parts.length < 2) {
-        throw new Error('Invalid base64 string format');
-      }
       
-      const contentType = parts[0].split(':')[1];
       const fileExt = contentType.split('/')[1] || 'png';
       const raw = window.atob(parts[1]);
       const rawLength = raw.length;

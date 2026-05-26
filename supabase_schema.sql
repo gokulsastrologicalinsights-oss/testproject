@@ -490,3 +490,57 @@ $$ language plpgsql;
 create trigger trigger_users_updated_at before update on users for each row execute procedure handle_updated_at();
 create trigger trigger_profiles_updated_at before update on profiles for each row execute procedure handle_updated_at();
 create trigger trigger_match_requests_updated_at before update on match_requests for each row execute procedure handle_updated_at();
+
+-- =========================================================================
+-- COMPLIANCE AND SAFETY EXTENSIONS
+-- =========================================================================
+
+-- Consent Logs for DPDP Act Compliance
+create table consent_logs (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid references users(id) on delete cascade,
+    consent_type varchar(50) not null, -- 'eligibility', 'terms_privacy', 'data_processing', 'info_accuracy'
+    accepted boolean default true,
+    policy_version varchar(10) not null,
+    ip_address text,
+    device_metadata text,
+    created_at timestamptz default now()
+);
+
+-- User Deletion / Permanent Erasure requests (DPDP Act right to be forgotten)
+create table deletion_requests (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid references users(id) on delete cascade,
+    status varchar(20) default 'pending', -- 'pending', 'completed', 'cancelled'
+    is_permanent boolean default false,
+    requested_at timestamptz default now(),
+    completed_at timestamptz
+);
+
+-- Profiles Table Modifications for Moderation and Suspension
+alter table profiles 
+add column is_suspended boolean default false,
+add column suspended_at timestamptz,
+add column moderation_status varchar(20) default 'pending', -- 'pending', 'approved', 'rejected'
+add column moderated_at timestamptz,
+add column moderated_by uuid,
+add column phone_visible boolean default false;
+
+-- Gallery Images Table Modifications for Moderation Status
+alter table gallery_images 
+add column moderation_status varchar(20) default 'approved', -- 'pending', 'approved', 'rejected'
+add column moderated_at timestamptz,
+add column moderated_by uuid;
+
+-- Enable Row Level Security (RLS)
+alter table consent_logs enable row level security;
+alter table deletion_requests enable row level security;
+
+-- RLS Policies
+create policy "Users can view own consent logs" on consent_logs for select using (auth.uid() = user_id);
+create policy "Users can insert own consent logs" on consent_logs for insert with check (auth.uid() = user_id);
+
+create policy "Users can view own deletion requests" on deletion_requests for select using (auth.uid() = user_id);
+create policy "Users can insert own deletion requests" on deletion_requests for insert with check (auth.uid() = user_id);
+create policy "Users can update own deletion requests" on deletion_requests for update using (auth.uid() = user_id);
+
