@@ -168,11 +168,16 @@ export function useCheckout() {
             Cancel Payment
           </button>
 
-          <div class="flex items-center justify-center gap-1 text-[9px] text-zinc-400 dark:text-zinc-500 tracking-wide">
-            <svg class="h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            <span>Razorpay Simulated Mode Sandbox Environment</span>
+          <div class="flex flex-col gap-2 items-center justify-center">
+            <div class="flex items-center justify-center gap-1 text-[9px] text-zinc-400 dark:text-zinc-500 tracking-wide">
+              <svg class="h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <span>Razorpay Simulated Mode Sandbox Environment</span>
+            </div>
+            <a href="https://razorpay.me/@gokulmurugan" target="_blank" rel="noopener noreferrer" class="mt-1 text-[10px] font-bold text-maroon-700 dark:text-gold-450 hover:underline flex items-center gap-1">
+              💳 Pay via Official Razorpay Page: razorpay.me/@gokulmurugan
+            </a>
           </div>
         </div>
       </div>
