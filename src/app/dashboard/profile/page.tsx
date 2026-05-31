@@ -5,14 +5,19 @@ import Link from 'next/link';
 import { 
   User, ShieldCheck, Star, Sparkles, 
   CheckCircle2, Award, ArrowRight,
-  Users, Edit3
+  Users, Edit3, Phone, Mail
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useProfileStore } from '@/stores/profileStore';
+import VerificationBadges from '@/components/ui/VerificationBadges';
 
 export default function DashboardProfilePage() {
-  const [profile, setProfile] = useState<any>(null);
+  const { profile, setProfile } = useProfileStore() as any;
   const [loading, setLoading] = useState(true);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [contactInfo, setContactInfo] = useState<{ email: string | null; mobileNumber: string | null } | null>(null);
+  const [horoscopeUrl, setHoroscopeUrl] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const handleExportData = () => {
     if (!profile) return;
@@ -30,6 +35,7 @@ export default function DashboardProfilePage() {
   };
 
   const handleDeleteAccountRequest = async () => {
+    if (!currentUserId) return;
     const confirmDelete = confirm("Are you sure you want to request account deactivation and deletion? Your profile will be hidden immediately and deleted after 30 days.");
     if (!confirmDelete) return;
 
@@ -40,7 +46,7 @@ export default function DashboardProfilePage() {
       const { error: reqErr } = await supabase
         .from('deletion_requests')
         .insert({
-          user_id: user.id,
+          user_id: currentUserId,
           status: 'pending',
           is_permanent: true
         });
@@ -56,7 +62,7 @@ export default function DashboardProfilePage() {
           is_suspended: true,
           suspended_at: new Date().toISOString()
         })
-        .eq('user_id', user.id);
+        .eq('user_id', currentUserId);
 
       if (profErr) {
         console.error("Failed to suspend profile:", profErr);
@@ -77,11 +83,21 @@ export default function DashboardProfilePage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
+        // Resolve user's database ID from auth_user_id
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+
+        const currentUserId = userRow?.id || user.id;
+        setCurrentUserId(currentUserId);
+
         // Fetch profile
         const { data } = await supabase
           .from('profiles')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', currentUserId)
           .maybeSingle();
 
         if (data) {
@@ -91,13 +107,44 @@ export default function DashboardProfilePage() {
           const { data: gallery } = await supabase
             .from('gallery_images')
             .select('image_url')
-            .eq('user_id', user.id)
+            .eq('user_id', currentUserId)
             .eq('is_profile_picture', true)
             .limit(1)
             .maybeSingle();
 
           if (gallery) {
             setProfilePhoto(gallery.image_url);
+          }
+
+          // Fetch contact details from users table
+          const { data: userData } = await supabase
+            .from('users')
+            .select('email, mobile_number')
+            .eq('id', currentUserId)
+            .maybeSingle();
+
+          if (userData) {
+            setContactInfo({
+              email: userData.email,
+              mobileNumber: userData.mobile_number
+            });
+          } else {
+            setContactInfo({
+              email: user.email || null,
+              mobileNumber: null
+            });
+          }
+
+          // Fetch horoscope uploads
+          const { data: horoscope } = await supabase
+            .from('horoscope_uploads')
+            .select('file_url')
+            .eq('user_id', currentUserId)
+            .limit(1)
+            .maybeSingle();
+
+          if (horoscope) {
+            setHoroscopeUrl(horoscope.file_url);
           }
         }
       } catch (err) {
@@ -183,11 +230,9 @@ export default function DashboardProfilePage() {
             </div>
           )}
 
-          {profile.is_verified && (
-            <div className="absolute top-4 left-4 px-2.5 py-0.5 rounded-full bg-emerald-600/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1">
-              <CheckCircle2 className="h-3 w-3" /> Verified Member
-            </div>
-          )}
+          <div className="absolute top-4 left-4">
+            <VerificationBadges profile={profile} size="sm" />
+          </div>
 
           <div className="absolute bottom-4 right-4 bg-maroon-500/95 text-white px-3 py-1 rounded-full text-[10px] font-bold shadow flex items-center gap-1 tracking-wider uppercase">
             <Sparkles className="h-3.5 w-3.5 text-gold-400" /> {memberLevel}
@@ -207,6 +252,8 @@ export default function DashboardProfilePage() {
             <span className="text-sm font-semibold text-gold-650 dark:text-gold-450 uppercase tracking-widest">
               {profile.education || 'Education Details Pending'} • {profile.city || 'Location Pending'}
             </span>
+
+            <VerificationBadges profile={profile} size="md" className="mt-1" />
 
             <p className="text-xs text-zinc-500 dark:text-zinc-400 font-light mt-2 leading-relaxed">
               Profile Created: {new Date(profile.created_at).toLocaleDateString()} • Visibility: <span className="font-semibold text-emerald-600 uppercase">{profile.visibility || 'Public'}</span>
@@ -239,14 +286,22 @@ export default function DashboardProfilePage() {
           <div className="flex flex-col gap-4">
             <span className="text-xs font-bold text-maroon-600 dark:text-gold-450 uppercase tracking-widest">Personal Details</span>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-light text-zinc-600 dark:text-zinc-400">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-light text-zinc-650 dark:text-zinc-400">
               <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
                 <span className="font-semibold text-zinc-855 dark:text-zinc-200">Age / DOB:</span>
                 <span>{profile.age || 'N/A'} yrs / {profile.date_of_birth || 'N/A'}</span>
               </div>
               <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
+                <span className="font-semibold text-zinc-855 dark:text-zinc-200">Gender / Marital Status:</span>
+                <span>{profile.gender || 'N/A'} / {profile.marital_status || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
                 <span className="font-semibold text-zinc-855 dark:text-zinc-200">Height / Weight:</span>
                 <span>{profile.height_cm ? `${profile.height_cm} cm` : 'N/A'} / {profile.weight_kg ? `${profile.weight_kg} kg` : 'N/A'}</span>
+              </div>
+              <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
+                <span className="font-semibold text-zinc-855 dark:text-zinc-200">Physical Status:</span>
+                <span>{profile.physical_status || 'Normal'}</span>
               </div>
               <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
                 <span className="font-semibold text-zinc-855 dark:text-zinc-200">Religion / Tongue:</span>
@@ -257,20 +312,20 @@ export default function DashboardProfilePage() {
                 <span>{profile.caste || 'N/A'} {profile.sub_caste ? `(${profile.sub_caste})` : ''}</span>
               </div>
               <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
-                <span className="font-semibold text-zinc-855 dark:text-zinc-200">Native Place:</span>
-                <span>{profile.native_place || 'N/A'}</span>
+                <span className="font-semibold text-zinc-855 dark:text-zinc-200">Native Place / Location:</span>
+                <span>{profile.native_place || 'N/A'} / {profile.city || 'N/A'}</span>
               </div>
               <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
                 <span className="font-semibold text-zinc-855 dark:text-zinc-200">Education Details:</span>
                 <span className="truncate max-w-[150px]">{profile.education || 'N/A'}</span>
               </div>
               <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
-                <span className="font-semibold text-zinc-855 dark:text-zinc-200">Employer / Income:</span>
-                <span>{profile.company_name || 'N/A'} • {profile.annual_income ? `₹${profile.annual_income.toLocaleString()}` : 'N/A'}</span>
+                <span className="font-semibold text-zinc-855 dark:text-zinc-200">Occupation / Employer:</span>
+                <span className="truncate max-w-[150px]">{profile.occupation || 'N/A'} {profile.company_name ? `(${profile.company_name})` : ''}</span>
               </div>
               <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
-                <span className="font-semibold text-zinc-855 dark:text-zinc-200">Work Location:</span>
-                <span>{profile.city || 'N/A'}</span>
+                <span className="font-semibold text-zinc-855 dark:text-zinc-200">Annual Income:</span>
+                <span>{profile.annual_income ? `₹${profile.annual_income.toLocaleString()}` : 'N/A'}</span>
               </div>
             </div>
           </div>
@@ -300,6 +355,25 @@ export default function DashboardProfilePage() {
 
           <div className="h-px bg-zinc-100 dark:bg-zinc-850" />
 
+          {/* Registered Contact Info */}
+          <div className="flex flex-col gap-4">
+            <span className="text-xs font-bold text-maroon-600 dark:text-gold-400 uppercase tracking-widest flex items-center gap-1.5">
+              <Phone className="h-4 w-4 shrink-0 text-emerald-600" /> Registered Contact Info
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-light text-zinc-650 dark:text-zinc-400">
+              <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2 items-center">
+                <span className="font-semibold text-zinc-855 dark:text-zinc-200 flex items-center gap-1"><Mail className="h-3.5 w-3.5" /> Email Address:</span>
+                <span>{contactInfo?.email || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2 items-center">
+                <span className="font-semibold text-zinc-855 dark:text-zinc-200 flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> Mobile Number:</span>
+                <span>{contactInfo?.mobileNumber || 'N/A'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="h-px bg-zinc-100 dark:bg-zinc-850" />
+
           {/* Expectations */}
           <div className="flex flex-col gap-2">
             <span className="text-xs font-bold text-maroon-600 dark:text-gold-400 uppercase tracking-widest">Ideal Partner Expectations</span>
@@ -308,10 +382,12 @@ export default function DashboardProfilePage() {
             </p>
           </div>
 
-                {/* Right Side: Astrology details */}
+        </div>
+
+        {/* Right Side: Astrology details */}
         <div className="lg:col-span-4 flex flex-col gap-6">
           <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl shadow-md border border-sandal-200 dark:border-zinc-800/80 text-left flex flex-col gap-4">
-            <span className="text-xs font-bold text-maroon-600 dark:text-gold-400 uppercase tracking-widest flex items-center gap-1">
+            <span className="text-xs font-bold text-maroon-600 dark:text-gold-450 uppercase tracking-widest flex items-center gap-1">
               <Award className="h-4 w-4 shrink-0" /> Horoscopic Details
             </span>
             
@@ -329,6 +405,28 @@ export default function DashboardProfilePage() {
                 <span>{profile.gothram || 'N/A'}</span>
               </div>
             </div>
+
+            {horoscopeUrl ? (
+              <a
+                href={horoscopeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 mt-2 rounded-xl border border-gold-500/30 text-center text-xs font-bold text-gold-650 dark:text-gold-400 hover:bg-gold-500/5 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                View Horoscope PDF
+              </a>
+            ) : (
+              <div className="w-full py-2.5 mt-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-455 dark:text-zinc-500 italic">
+                No Horoscope Uploaded
+              </div>
+            )}
+            
+            <Link 
+              href="/dashboard/verification" 
+              className="text-[10px] text-center font-bold text-maroon-600 dark:text-gold-400 hover:underline uppercase tracking-wider block mt-2"
+            >
+              Verify Profile &amp; Uploads ➔
+            </Link>
           </div>
 
           {/* Privacy Controls (DPDP Readiness) */}
@@ -354,7 +452,7 @@ export default function DashboardProfilePage() {
               </button>
             </div>
           </div>
-        </div>  </div>
+        </div>
 
       </div>
 

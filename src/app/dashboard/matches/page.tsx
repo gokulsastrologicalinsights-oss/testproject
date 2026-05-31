@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Search, Heart, HeartOff, Phone, 
   MessageSquare, UserX, CheckCircle2, ShieldAlert, 
@@ -10,8 +10,11 @@ import {
 import MatchFilters from '@/components/matchmaking/MatchFilters';
 import { matchService } from '@/services/match.service';
 import { supabase } from '@/lib/supabase';
+import { contactConfig } from '@/config/contact.config';
+import VerificationBadges from '@/components/ui/VerificationBadges';
 
 function MatchesContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   // Search Param Initializer
@@ -35,6 +38,10 @@ function MatchesContent() {
   // Active selected profile for Modal
   const [activeProfile, setActiveProfile] = useState<any>(null);
 
+  // Gating & Premium States
+  const [isPremium, setIsPremium] = useState(false);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+
   // Sync state if URL search parameters change
   useEffect(() => {
     const gen = searchParams?.get('gender');
@@ -54,13 +61,25 @@ function MatchesContent() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          setCurrentUserId(user.id);
+          // Resolve user's database ID and role
+          const { data: userRow } = await supabase
+            .from('users')
+            .select('id, role, profiles(is_premium)')
+            .eq('auth_user_id', user.id)
+            .maybeSingle();
+
+          const dbUserId = userRow?.id || user.id;
+          setCurrentUserId(dbUserId);
+
+          const isProfilePremium = (userRow as any)?.profiles?.is_premium || false;
+          const isRolePremium = userRow?.role !== 'user' && userRow?.role !== 'free';
+          setIsPremium(isProfilePremium || isRolePremium);
           
           // Load existing shortlist favorites
           const { data: favs } = await supabase
             .from('favorites')
             .select('favorite_user_id')
-            .eq('user_id', user.id);
+            .eq('user_id', dbUserId);
           if (favs) {
             const shortlistMap: Record<string, boolean> = {};
             favs.forEach(f => {
@@ -70,9 +89,21 @@ function MatchesContent() {
           }
         }
 
+        const { data: featuredData } = await supabase
+          .from('featured_profiles')
+          .select('user_id')
+          .eq('is_active', true)
+          .gt('end_date', new Date().toISOString());
+        
+        const featuredSet = new Set(featuredData?.map(f => f.user_id) || []);
+
         const { data } = await matchService.getMatches();
         if (data) {
-          setAllProfiles(data);
+          const mapped = data.map((p: any) => ({
+            ...p,
+            is_featured: featuredSet.has(p.user_id)
+          }));
+          setAllProfiles(mapped);
         }
       } catch (err) {
         console.error('Failed to load profiles:', err);
@@ -86,7 +117,7 @@ function MatchesContent() {
 
   // Filtering Logic
   const filteredProfiles = allProfiles.filter((profile) => {
-    // 1. Gender check: Match opposite gender of the user's dashboard selection, or match directly if clicked in search
+    // 1. Gender check: Match opposite gender of the user's dashboard selection
     if (profile.gender !== gender) return false;
 
     // 2. Age check
@@ -95,20 +126,23 @@ function MatchesContent() {
     // 3. Religion check
     if (religion && profile.religion.toLowerCase() !== religion.toLowerCase()) return false;
 
-    // 4. Caste filter
-    if (caste && !profile.caste.toLowerCase().includes(caste.toLowerCase())) return false;
+    // Gate advanced filters client-side to prevent bypass
+    if (isPremium) {
+      // 4. Caste filter
+      if (caste && !profile.caste.toLowerCase().includes(caste.toLowerCase())) return false;
 
-    // 5. Rasi filter
-    if (rasi && profile.rasi.toLowerCase() !== rasi.toLowerCase()) return false;
+      // 5. Rasi filter
+      if (rasi && profile.rasi.toLowerCase() !== rasi.toLowerCase()) return false;
 
-    // 6. Star filter
-    if (star && !profile.star.toLowerCase().includes(star.toLowerCase())) return false;
+      // 6. Star filter
+      if (star && !profile.star.toLowerCase().includes(star.toLowerCase())) return false;
 
-    // 7. Location filter
-    if (location && !profile.location.toLowerCase().includes(location.toLowerCase())) return false;
+      // 7. Location filter
+      if (location && !profile.location.toLowerCase().includes(location.toLowerCase())) return false;
 
-    // 8. Profession filter
-    if (profession && !profile.education.toLowerCase().includes(profession.toLowerCase())) return false;
+      // 8. Profession filter
+      if (profession && !profile.education.toLowerCase().includes(profession.toLowerCase())) return false;
+    }
 
     return true;
   });
@@ -129,7 +163,7 @@ function MatchesContent() {
           .eq('user_id', currentUserId)
           .eq('favorite_user_id', targetUserId);
         
-        setShortlisted(prev => ({ ...prev, [id]: false }));
+          setShortlisted(prev => ({ ...prev, [id]: false }));
         alert(`Removed ${name} from Shortlist.`);
       } else {
         await supabase
@@ -139,7 +173,7 @@ function MatchesContent() {
             favorite_user_id: targetUserId
           });
 
-        setShortlisted(prev => ({ ...prev, [id]: true }));
+          setShortlisted(prev => ({ ...prev, [id]: true }));
         alert(`Added ${name} to Shortlist!`);
       }
     } catch (e: any) {
@@ -170,7 +204,7 @@ function MatchesContent() {
       
       {/* Search Header Banner */}
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl md:text-3xl font-serif font-bold text-zinc-900 dark:text-zinc-50">
+        <h1 className="text-2xl md:text-3xl font-serif font-bold text-zinc-900 dark:text-zinc-55">
           Find Your Perfect Match
         </h1>
         <p className="text-xs text-zinc-500 dark:text-zinc-400 font-light">
@@ -216,6 +250,8 @@ function MatchesContent() {
             setLocation('');
             setProfession('');
           }}
+          isPremium={isPremium}
+          onUpgradePrompt={() => setShowUpgradePrompt(true)}
         />
 
         {/* RIGHT COLUMN: PROFILES LISTING */}
@@ -230,21 +266,34 @@ function MatchesContent() {
               {filteredProfiles.map((profile) => (
                 <div
                   key={profile.id}
-                  className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-md border border-sandal-200 dark:border-zinc-800/80 hover:shadow-lg transition-all flex flex-col justify-between relative overflow-hidden"
+                  className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-md border border-sandal-200 dark:border-zinc-800/80 hover:shadow-lg transition-all flex flex-col justify-between relative overflow-hidden animate-fade-in"
                 >
                   {/* Photo Section */}
                   <div className="w-full h-40 rounded-2xl bg-gradient-to-tr from-sandal-100 to-amber-50 dark:from-zinc-800 dark:to-zinc-850 flex items-center justify-center relative">
                     <Sparkles className="h-10 w-10 text-maroon-500/10" />
                     
-                    {profile.isVerified && (
-                      <div className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full bg-emerald-600/90 text-[8px] font-bold text-white uppercase tracking-wider flex items-center gap-1">
-                        <CheckCircle2 className="h-2.5 w-2.5" /> Verified
+                    <div className="absolute top-2.5 left-2.5 z-10">
+                      <VerificationBadges profile={profile} size="sm" />
+                    </div>
+
+                    {profile.is_featured && (
+                      <div className="absolute top-2.5 right-2.5 bg-gradient-to-r from-amber-500 to-gold-500 text-zinc-950 text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider font-mono shadow-sm flex items-center gap-0.5 z-10 select-none border border-gold-450">
+                        <Star className="h-3 w-3 fill-zinc-950 text-zinc-950" /> Featured
                       </div>
                     )}
 
-                    <div className="absolute bottom-2.5 right-2.5 px-2.5 py-0.5 rounded bg-white/95 dark:bg-zinc-900/95 text-xs font-semibold text-maroon-700 dark:text-gold-400">
-                      {profile.score}% Indicative Compatibility
-                    </div>
+                    {isPremium ? (
+                      <div className="absolute bottom-2.5 right-2.5 px-2.5 py-0.5 rounded bg-white/95 dark:bg-zinc-900/95 text-xs font-semibold text-maroon-700 dark:text-gold-450 shadow-sm">
+                        {profile.score}% Indicative Compatibility
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowUpgradePrompt(true)}
+                        className="absolute bottom-2.5 right-2.5 px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-600 text-[9px] font-bold text-white uppercase tracking-wider flex items-center gap-1 shadow-md cursor-pointer focus:outline-none"
+                      >
+                        🔒 Unlock Astro Score
+                      </button>
+                    )}
                   </div>
 
                   {/* Text details */}
@@ -261,7 +310,11 @@ function MatchesContent() {
                       <li className="font-semibold text-zinc-800 dark:text-zinc-300">{profile.education}</li>
                       <li>{profile.location}</li>
                       <li className="font-semibold text-gold-600 dark:text-gold-400 pt-1.5 uppercase text-[9px] tracking-wider">
-                        {profile.rasi} Rasi • {profile.star} • {profile.gothram}
+                        {isPremium ? (
+                          `${profile.rasi} Rasi • ${profile.star} • ${profile.gothram}`
+                        ) : (
+                          "🔒 Star & Rasi Hidden (Upgrade)"
+                        )}
                       </li>
                     </ul>
                   </div>
@@ -285,7 +338,7 @@ function MatchesContent() {
                     {/* View Profile */}
                     <button
                       onClick={() => setActiveProfile(profile)}
-                      className="flex-1 py-2 text-center rounded-lg border border-zinc-200 dark:border-zinc-850 text-xs font-semibold text-zinc-600 dark:text-zinc-350 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                      className="flex-1 py-2 text-center rounded-lg border border-zinc-200 dark:border-zinc-855 text-xs font-semibold text-zinc-600 dark:text-zinc-350 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                     >
                       View Details
                     </button>
@@ -315,7 +368,7 @@ function MatchesContent() {
 
       {/* DETAIL MODAL OVERLAY */}
       {activeProfile && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
           <div className="bg-white dark:bg-zinc-900 w-full max-w-2xl rounded-3xl shadow-2xl border border-sandal-200 dark:border-zinc-800 overflow-hidden flex flex-col relative max-h-[90vh]">
             
             {/* Header info */}
@@ -323,11 +376,20 @@ function MatchesContent() {
               <div className="flex flex-col text-left gap-1">
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl font-serif font-bold text-zinc-900 dark:text-zinc-50">{activeProfile.name}</h2>
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center gap-0.5">
-                    {activeProfile.score}% Traditional Guidance Score
-                  </span>
+                  {isPremium ? (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center gap-0.5">
+                      {activeProfile.score}% Traditional Guidance Score
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => { setActiveProfile(null); setShowUpgradePrompt(true); }}
+                      className="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-0.5 cursor-pointer"
+                    >
+                      🔒 Unlock Score
+                    </button>
+                  )}
                 </div>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">ID: {activeProfile.id} • Verified Profile</span>
+                <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">ID: {activeProfile.id} • Verified Profile</span>
               </div>
 
               <button
@@ -367,10 +429,22 @@ function MatchesContent() {
                   <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
                     <Star className="h-4 w-4 text-maroon-500" /> Horoscope Coordinates
                   </span>
-                  <ul className="text-xs space-y-1.5 font-light">
-                    <li><strong className="font-semibold text-zinc-850 dark:text-zinc-200">Rasi / Star:</strong> {activeProfile.rasi} Rasi / {activeProfile.star}</li>
-                    <li><strong className="font-semibold text-zinc-850 dark:text-zinc-200">Gothram:</strong> {activeProfile.gothram}</li>
-                  </ul>
+                  {isPremium ? (
+                    <ul className="text-xs space-y-1.5 font-light">
+                      <li><strong className="font-semibold text-zinc-850 dark:text-zinc-200">Rasi / Star:</strong> {activeProfile.rasi} Rasi / {activeProfile.star}</li>
+                      <li><strong className="font-semibold text-zinc-850 dark:text-zinc-200">Gothram:</strong> {activeProfile.gothram}</li>
+                    </ul>
+                  ) : (
+                    <div className="flex flex-col gap-2 items-start">
+                      <span className="text-xs text-zinc-400 font-light italic">🔒 Coordinates gated (Premium only)</span>
+                      <button
+                        onClick={() => { setActiveProfile(null); setShowUpgradePrompt(true); }}
+                        className="text-[9px] font-bold text-gold-600 uppercase tracking-wider hover:underline"
+                      >
+                        Upgrade to view details
+                      </button>
+                    </div>
+                  )}
                 </div>
 
               </div>
@@ -402,18 +476,18 @@ function MatchesContent() {
             </div>
 
             {/* Footer triggers */}
-            <div className="p-6 bg-sandal-50 dark:bg-zinc-950 border-t border-zinc-100 dark:border-zinc-850 flex flex-wrap items-center justify-between gap-4">
+            <div className="p-6 bg-sandal-50/50 dark:bg-zinc-950/60 border-t border-zinc-100 dark:border-zinc-850 flex flex-wrap items-center justify-between gap-4">
               <button
                 onClick={() => { handleBlockUser(activeProfile.name); setActiveProfile(null); }}
-                className="text-xs font-semibold text-red-500 hover:text-red-600 inline-flex items-center gap-1 cursor-pointer"
+                className="text-xs font-semibold text-red-500 hover:text-red-650 inline-flex items-center gap-1 cursor-pointer"
               >
                 <ShieldAlert className="h-4 w-4" /> Report Profile
               </button>
 
               <div className="flex items-center gap-3">
                 {/* WhatsApp Inquiry Button */}
-                <a
-                  href={`https://wa.me/919876543210?text=I'm%20inquiring%20about%20Gokul%20Vivaham%20Profile%20ID%20${activeProfile.id}%20(${activeProfile.name})`}
+                 <a
+                  href={`https://wa.me/919444559071?text=I'm%20inquiring%20about%2520Gokul%2520Vivaham%2520Profile%2520ID%2520${activeProfile.id}%20(${activeProfile.name})`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-bold uppercase tracking-wider shadow-sm transition-all duration-200 inline-flex items-center gap-1.5"
@@ -430,6 +504,35 @@ function MatchesContent() {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* UPGRADE PROMPT MODAL */}
+      {showUpgradePrompt && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-zinc-900 border border-sandal-200 dark:border-zinc-800 rounded-3xl shadow-2xl p-6 max-w-sm flex flex-col gap-4 text-center">
+            <div className="luxury-gradient w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold mx-auto shadow-md">
+              ★
+            </div>
+            <h3 className="text-lg font-serif font-bold text-zinc-900 dark:text-zinc-50">Unlock Premium Matchmaking</h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed font-light">
+              Advanced filters, detailed horoscope coordinates, and verified contacts are reserved for Premium Members. Choose a plan and connect with compatibility.
+            </p>
+            <div className="flex gap-3 justify-center mt-2">
+              <button
+                onClick={() => setShowUpgradePrompt(false)}
+                className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 text-xs font-semibold uppercase rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-950/20 cursor-pointer focus:outline-none"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={() => { setShowUpgradePrompt(false); router.push('/dashboard/subscription'); }}
+                className="px-5 py-2 luxury-gradient text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow cursor-pointer focus:outline-none"
+              >
+                Upgrade Now
+              </button>
+            </div>
           </div>
         </div>
       )}

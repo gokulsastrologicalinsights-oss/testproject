@@ -49,7 +49,7 @@ export default function HeroSection() {
               <select 
                 value={gender} 
                 onChange={(e) => setGender(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-150"
+                className="w-full h-10 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-white"
               >
                 <option value="Female">Groom (Bride-to-be)</option>
                 <option value="Male">Bride (Groom-to-be)</option>
@@ -62,7 +62,7 @@ export default function HeroSection() {
                 <select 
                   value={ageMin} 
                   onChange={(e) => setAgeMin(e.target.value)}
-                  className="w-full h-10 px-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-850 dark:text-zinc-150"
+                  className="w-full h-10 px-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-white"
                 >
                   {[...Array(53)].map((_, i) => (
                     <option key={i + 18} value={i + 18}>{i + 18}</option>
@@ -72,7 +72,7 @@ export default function HeroSection() {
                 <select 
                   value={ageMax} 
                   onChange={(e) => setAgeMax(e.target.value)}
-                  className="w-full h-10 px-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-850 dark:text-zinc-150"
+                  className="w-full h-10 px-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-white"
                 >
                   {[...Array(53)].map((_, i) => (
                     <option key={i + 18} value={i + 18}>{i + 18}</option>
@@ -86,7 +86,7 @@ export default function HeroSection() {
               <select 
                 value={religion} 
                 onChange={(e) => setReligion(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-850 dark:text-zinc-150"
+                className="w-full h-10 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-white"
               >
                 <option value="Hindu">Hindu</option>
                 <option value="Christian">Christian</option>

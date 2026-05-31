@@ -7,6 +7,7 @@ import { Menu, X, Heart, User, LogOut, ShieldAlert, Phone } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { contactConfig } from '@/config/contact.config';
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -33,19 +34,15 @@ export default function Navbar() {
 
   const handleSignOut = async () => {
     try {
-      const secureFlag = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
-      document.cookie = `sb-access-token=; path=/; max-age=0; SameSite=Lax${secureFlag}`;
-      localStorage.removeItem('gokul_mock_session');
       await useAuthStore.getState().logout();
-      window.location.href = '/';
     } catch (e) {
       console.error('Logout error:', e);
-      window.location.href = '/';
+      window.location.href = '/login';
     }
   };
 
-  // Do not show main navbar inside the admin dashboard or admin login
-  if (pathname?.startsWith('/admin/dashboard') || pathname?.startsWith('/admin/login')) {
+  // Do not show main navbar inside any admin route
+  if (pathname?.startsWith('/admin')) {
     return null;
   }
 
@@ -93,6 +90,17 @@ export default function Navbar() {
 
             <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800" />
 
+            <a
+              href={contactConfig.whatsapp.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-450 rounded-full text-xs font-semibold transition-all border border-emerald-500/25 shrink-0"
+              aria-label="Connect with us on WhatsApp"
+            >
+              <Phone className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-450" />
+              <span>Support: {contactConfig.phone.display}</span>
+            </a>
+
             <ThemeToggle />
 
             {user ? (
@@ -122,6 +130,11 @@ export default function Navbar() {
                 </Link>
                 <Link
                   href="/register"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      localStorage.removeItem('gokul_matrimony_register_draft');
+                    }
+                  }}
                   className="flex items-center justify-center px-5 h-10 rounded-full luxury-gradient text-white text-xs font-semibold uppercase tracking-widest hover:opacity-90 shadow-md transition-all duration-200"
                 >
                   Register
@@ -132,6 +145,14 @@ export default function Navbar() {
 
           {/* Mobile/Tablet menu button */}
           <div className="lg:hidden flex items-center gap-3">
+            <a
+              href={contactConfig.phone.link}
+              className="p-2 rounded-full border border-maroon-500/20 text-maroon-600 dark:text-gold-450 hover:bg-maroon-50 dark:hover:bg-zinc-800/50 flex items-center justify-center shrink-0 touch-target"
+              title="Call Support"
+              aria-label="Call Support"
+            >
+              <Phone className="h-4.5 w-4.5" />
+            </a>
             <ThemeToggle />
             {user && (
               <Link
@@ -206,7 +227,12 @@ export default function Navbar() {
                 </Link>
                 <Link
                   href="/register"
-                  onClick={() => setIsOpen(false)}
+                  onClick={() => {
+                    setIsOpen(false);
+                    if (typeof window !== 'undefined') {
+                      localStorage.removeItem('gokul_matrimony_register_draft');
+                    }
+                  }}
                   className="flex items-center justify-center w-full px-4 py-2 luxury-gradient text-white font-semibold rounded-full hover:opacity-90 shadow-md"
                 >
                   Register

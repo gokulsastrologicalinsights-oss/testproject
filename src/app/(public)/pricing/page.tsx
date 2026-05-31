@@ -1,76 +1,140 @@
 'use client';
 
-import Link from 'next/link';
-import { Check, Star, ShieldCheck, Heart, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Check, Star, ShieldCheck } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { useCheckout } from '@/hooks/useCheckout';
+import { SUBSCRIPTION_PLANS } from '@/constants/payments';
+import Toast from '@/components/ui/toast/Toast';
+
+const planMetadata = [
+  {
+    key: 'FREE',
+    name: 'Free Basic',
+    desc: 'Build your profile and search matching candidates.',
+    features: [
+      'Detailed Profile Creation',
+      'Advanced Search Filters',
+      'Express interest (3 / day)',
+      'Receive match requests',
+      'Horoscope Uploading'
+    ],
+    missing: [
+      'View Verified Phone Numbers',
+      'Direct Chat Integration',
+      'Astro compatibility correction assistance',
+      'Dedicated Matchmaking Manager'
+    ],
+    popular: false
+  },
+  {
+    key: 'SILVER',
+    name: 'Silver Essential',
+    desc: 'Connect directly and view verified phone contacts.',
+    features: [
+      'Everything in Free Basic',
+      'View 20 Verified Contacts',
+      'Express interest (20 / day)',
+      'Direct Chat with compatible matches',
+    ],
+    missing: [
+      'Advanced Filters',
+      'Astro compatibility correction assistance',
+      'Dedicated Matchmaking Manager'
+    ],
+    popular: false
+  },
+  {
+    key: 'GOLD',
+    name: 'Gold Elite',
+    desc: 'Advanced search filters and horoscope compatibility checks.',
+    features: [
+      'Everything in Silver Essential',
+      'View 50 Verified Contacts',
+      'Express interest (50 / day)',
+      'Advanced Filters & Horoscope Compatibility',
+      'Profile Highlighted listing'
+    ],
+    missing: [
+      'Dedicated Matchmaking Manager',
+      'VIP support'
+    ],
+    popular: true
+  },
+  {
+    key: 'PLATINUM',
+    name: 'Platinum Premium',
+    desc: 'Full astrological review and dedicated matchmaking agent.',
+    features: [
+      'Everything in Gold Elite',
+      'View Unlimited Verified Contacts',
+      'Express interest (1000 / day)',
+      'Dedicated Matchmaking Manager',
+      'Horoscope translation & compatibility assistance',
+      'Priority VIP Customer Support'
+    ],
+    missing: [],
+    popular: false
+  }
+];
 
 export default function Pricing() {
-  const plans = [
-    {
-      name: 'Free Basic',
-      price: '₹0',
-      period: 'lifetime',
-      desc: 'Build your profile and search matching candidates.',
-      features: [
-        'Detailed Profile Creation',
-        'Advanced Search Filters',
-        'Express interest (5 / day)',
-        'Receive match requests',
-        'Horoscope Uploading'
-      ],
-      missing: [
-        'View Verified Phone Numbers',
-        'Direct Chat Integration',
-        'Astro compatibility correction assistance',
-        'Dedicated Matchmaking Manager'
-      ],
-      btnText: 'Register Free',
-      btnHref: '/register',
-      popular: false
-    },
-    {
-      name: 'Gold Elite',
-      price: '₹4,999',
-      period: '3 months',
-      desc: 'Connect directly and view verified phone contacts.',
-      features: [
-        'Everything in Free Basic',
-        'View 30 Verified Contacts',
-        'Unlimited Express Interests',
-        'Direct Chat with compatible matches',
-        'Profile Highlighted listing',
-        'Access matched horoscopes PDF'
-      ],
-      missing: [
-        'Astro compatibility correction assistance',
-        'Dedicated Matchmaking Manager'
-      ],
-      btnText: 'Go Gold Elite',
-      btnHref: '/register',
-      popular: true
-    },
-    {
-      name: 'Diamond Premium',
-      price: '₹8,999',
-      period: '6 months',
-      desc: 'Full astrological review and dedicated matchmaking agent.',
-      features: [
-        'Everything in Gold Elite',
-        'View 80 Verified Contacts',
-        'Dedicated Matchmaking Manager',
-        'Astro compatibility assistance',
-        'Premium Customer Support',
-        'Direct family meet setup assistance'
-      ],
-      missing: [],
-      btnText: 'Unlock Diamond Premium',
-      btnHref: '/register',
-      popular: false
+  const router = useRouter();
+  const { isAuthenticated } = useAuth();
+  const { initiateCheckout, loading, error, setError } = useCheckout();
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [purchasingPlanId, setPurchasingPlanId] = useState<string | null>(null);
+
+  const handlePurchase = async (planKey: string, planId: string) => {
+    if (planKey === 'FREE') {
+      if (isAuthenticated) {
+        router.push('/dashboard');
+      } else {
+        router.push('/register');
+      }
+      return;
     }
-  ];
+
+    if (!isAuthenticated) {
+      router.push(`/login?returnTo=/pricing&message=${encodeURIComponent('Please login to purchase premium subscription packages.')}`);
+      return;
+    }
+
+    setPurchasingPlanId(planId);
+    setError(null);
+
+    await initiateCheckout({
+      paymentType: 'subscription',
+      planId: planId,
+      onSuccess: () => {
+        setPurchasingPlanId(null);
+        setSuccessMsg('Payment capture verified! Your subscription is active now.');
+        setTimeout(() => {
+          router.push('/dashboard/subscription?success=true');
+        }, 1500);
+      },
+      onCancel: () => {
+        setPurchasingPlanId(null);
+      }
+    });
+  };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-12 md:py-16 text-left flex flex-col gap-10">
+    <div className="max-w-7xl mx-auto px-4 py-12 md:py-16 text-left flex flex-col gap-10">
       
+      {/* Toast Notifications */}
+      {error && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 min-w-[300px]">
+          <Toast message={error} type="error" onClose={() => setError(null)} />
+        </div>
+      )}
+      {successMsg && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 min-w-[300px]">
+          <Toast message={successMsg} type="success" onClose={() => setSuccessMsg(null)} />
+        </div>
+      )}
+
       {/* Title */}
       <div className="flex flex-col items-center text-center gap-3">
         <h1 className="text-3xl md:text-4xl font-serif font-bold text-zinc-900 dark:text-zinc-50">
@@ -83,66 +147,85 @@ export default function Pricing() {
       </div>
 
       {/* Plans Card Deck */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch mt-6">
-        {plans.map((plan) => (
-          <div
-            key={plan.name}
-            className={`bg-white dark:bg-zinc-900 rounded-3xl p-6 md:p-8 flex flex-col justify-between relative shadow-xl hover:scale-[1.01] transition-transform duration-300 ${
-              plan.popular 
-                ? 'border-2 border-gold-500 ring-4 ring-gold-500/10' 
-                : 'border border-sandal-200 dark:border-zinc-800'
-            }`}
-          >
-            {plan.popular && (
-              <span className="absolute top-0 right-8 transform -translate-y-1/2 px-3 py-1 bg-gold-500 text-white text-[9px] font-black uppercase tracking-widest rounded-full">
-                Most Popular
-              </span>
-            )}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch mt-6">
+        {planMetadata.map((meta) => {
+          const planDef = SUBSCRIPTION_PLANS[meta.key];
+          if (!planDef) return null;
 
-            <div>
-              <h3 className="text-xl font-serif font-bold text-zinc-850 dark:text-zinc-100 flex items-center gap-1.5">
-                {plan.name}
-                {plan.popular && <Star className="h-4 w-4 text-gold-500 fill-gold-500" />}
-              </h3>
-              
-              <div className="mt-4 flex items-baseline">
-                <span className="text-4xl font-serif font-extrabold text-zinc-900 dark:text-white">{plan.price}</span>
-                <span className="text-xs text-zinc-400 dark:text-zinc-500 pl-1">/ {plan.period}</span>
+          const isPurchasingThis = purchasingPlanId === planDef.id && loading;
+
+          return (
+            <div
+              key={meta.key}
+              className={`bg-white dark:bg-zinc-900 rounded-3xl p-6 flex flex-col justify-between relative shadow-xl hover:scale-[1.01] transition-transform duration-300 ${
+                meta.popular 
+                  ? 'border-2 border-gold-500 ring-4 ring-gold-500/10' 
+                  : 'border border-sandal-200 dark:border-zinc-800'
+              }`}
+            >
+              {meta.popular && (
+                <span className="absolute top-0 right-8 transform -translate-y-1/2 px-3 py-1 bg-gold-500 text-white text-[9px] font-black uppercase tracking-widest rounded-full">
+                  Most Popular
+                </span>
+              )}
+
+              <div>
+                <h3 className="text-lg font-serif font-bold text-zinc-850 dark:text-zinc-100 flex items-center gap-1.5">
+                  {meta.name}
+                  {meta.popular && <Star className="h-4 w-4 text-gold-500 fill-gold-500" />}
+                </h3>
+                
+                <div className="mt-4 flex items-baseline">
+                  <span className="text-3xl font-serif font-extrabold text-zinc-900 dark:text-white">
+                    ₹{planDef.price.toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-xs text-zinc-450 dark:text-zinc-550 pl-1">
+                    / {planDef.durationDays >= 3650 ? 'lifetime' : `${planDef.durationDays} days`}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-550 dark:text-zinc-400 mt-2 leading-relaxed font-light">{meta.desc}</p>
+                
+                <div className="h-px bg-zinc-100 dark:bg-zinc-850 my-6" />
+
+                {/* Features List */}
+                <ul className="space-y-3">
+                  {meta.features.map(f => (
+                    <li key={f} className="flex items-start gap-2.5 text-xs text-zinc-650 dark:text-zinc-450 leading-normal font-light">
+                      <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                      {f}
+                    </li>
+                  ))}
+                  {meta.missing.map(f => (
+                    <li key={f} className="flex items-start gap-2.5 text-xs text-zinc-400 dark:text-zinc-600 leading-normal font-light line-through">
+                      {f}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2 leading-relaxed font-light">{plan.desc}</p>
-              
-              <div className="h-px bg-zinc-100 dark:bg-zinc-850 my-6" />
 
-              {/* Features List */}
-              <ul className="space-y-3">
-                {plan.features.map(f => (
-                  <li key={f} className="flex items-start gap-2.5 text-xs text-zinc-650 dark:text-zinc-450 leading-normal font-light">
-                    <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                    {f}
-                  </li>
-                ))}
-                {plan.missing.map(f => (
-                  <li key={f} className="flex items-start gap-2.5 text-xs text-zinc-400 dark:text-zinc-600 leading-normal font-light line-through">
-                    {f}
-                  </li>
-                ))}
-              </ul>
+              <div className="mt-8 pt-4 border-t border-zinc-100 dark:border-zinc-850">
+                <button
+                  onClick={() => handlePurchase(meta.key, planDef.id)}
+                  disabled={loading}
+                  className={`block w-full py-2.5 rounded-full text-center text-xs font-bold uppercase tracking-wider transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                    meta.popular
+                      ? 'luxury-gradient text-white hover:opacity-95'
+                      : 'border border-maroon-500/20 text-maroon-700 dark:text-gold-450 hover:bg-maroon-500/5 bg-transparent'
+                  }`}
+                >
+                  {isPurchasingThis ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Processing...
+                    </span>
+                  ) : (
+                    meta.key === 'FREE' ? 'Register Free' : `Get ${meta.name}`
+                  )}
+                </button>
+              </div>
             </div>
-
-            <div className="mt-8 pt-4 border-t border-zinc-100 dark:border-zinc-850">
-              <Link
-                href={plan.btnHref}
-                className={`block w-full py-2.5 rounded-full text-center text-xs font-bold uppercase tracking-wider transition-all shadow-md ${
-                  plan.popular
-                    ? 'luxury-gradient text-white hover:opacity-95'
-                    : 'border border-maroon-500/20 text-maroon-700 dark:text-gold-450 hover:bg-maroon-500/5'
-                }`}
-              >
-                {plan.btnText}
-              </Link>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Payment Badges */}

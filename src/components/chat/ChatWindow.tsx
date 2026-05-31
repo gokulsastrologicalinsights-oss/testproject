@@ -2,7 +2,9 @@
 import { useRef, useEffect } from 'react';
 import MessageBubble from './MessageBubble';
 import ChatInput from './ChatInput';
-import { ShieldCheck, MessageCircle } from 'lucide-react';
+import { ShieldCheck, MessageCircle, Flag, ExternalLink } from 'lucide-react';
+import VerificationBadges from '@/components/ui/VerificationBadges';
+import { safetyService } from '@/services/safety.service';
 
 interface ChatWindowProps {
   activeChat: any;
@@ -18,6 +20,56 @@ export default function ChatWindow({
   loading
 }: ChatWindowProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const handleHeaderBlock = async () => {
+    if (!activeChat) return;
+    const confirmBlock = confirm(`Are you sure you want to block ${activeChat.contact_name}? This conversation and connection details will be permanently deleted. Proceed?`);
+    if (!confirmBlock) return;
+
+    try {
+      const { error } = await safetyService.blockUser(activeChat.other_user_id, 'Blocked from chat window');
+      if (error) throw error;
+      alert(`Blocked member ${activeChat.contact_name}`);
+      window.location.reload();
+    } catch (e: any) {
+      alert('Error blocking: ' + e.message);
+    }
+  };
+
+  const handleReportMessage = async (messageId: string, messageText: string) => {
+    if (!activeChat) return;
+
+    const catChoice = prompt(
+      'Select a category for reporting this message (Enter number 1-5):\n' +
+      '1. Fake Profile\n' +
+      '2. Spam\n' +
+      '3. Harassment\n' +
+      '4. Inappropriate Content\n' +
+      '5. Other'
+    );
+    if (!catChoice) return;
+
+    let category: 'Fake Profile' | 'Spam' | 'Harassment' | 'Inappropriate Content' | 'Other' = 'Other';
+    if (catChoice === '1') category = 'Fake Profile';
+    else if (catChoice === '2') category = 'Spam';
+    else if (catChoice === '3') category = 'Harassment';
+    else if (catChoice === '4') category = 'Inappropriate Content';
+    else if (catChoice === '5') category = 'Other';
+
+    const reason = prompt(`Specify the reason for reporting this message: "${messageText.substring(0, 30)}..."`);
+    if (!reason) return;
+
+    try {
+      const { error } = await safetyService.reportMessage(messageId, activeChat.other_user_id, category, reason);
+      if (error) {
+        alert('Failed to submit report: ' + error.message);
+      } else {
+        alert('Message reported to moderators.');
+      }
+    } catch (e: any) {
+      alert('Error: ' + e.message);
+    }
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -46,21 +98,33 @@ export default function ChatWindow({
       {/* Active User Header */}
       <div className="p-4 border-b border-sandal-200 dark:border-zinc-800/80 flex items-center justify-between bg-white dark:bg-zinc-900">
         <div className="flex items-center gap-3 text-left">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-sandal-200 to-amber-100 dark:from-zinc-800 dark:to-zinc-700 flex items-center justify-center font-bold text-xs text-maroon-700 dark:text-gold-400 shadow-sm shrink-0">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-sandal-200 to-amber-100 dark:from-zinc-800 dark:to-zinc-700 flex items-center justify-center font-bold text-xs text-maroon-700 dark:text-gold-450 shadow-sm shrink-0">
             {activeChat.contact_name[0].toUpperCase()}
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-              {activeChat.contact_name}
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                {activeChat.contact_name}
+              </span>
+              <VerificationBadges profile={activeChat} size="sm" />
+            </div>
             <span className="text-[10px] text-emerald-600 dark:text-emerald-500 flex items-center gap-1 font-mono">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Active Channel
             </span>
           </div>
         </div>
 
-        <div className="px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
-          <ShieldCheck className="h-3.5 w-3.5" /> SECURE CHAT
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleHeaderBlock}
+            className="px-2.5 py-1 rounded border border-red-500/25 hover:bg-red-500/5 text-red-500 text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+            title="Block this Member"
+          >
+            Block Member
+          </button>
+          <div className="px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
+            <ShieldCheck className="h-3.5 w-3.5" /> SECURE CHAT
+          </div>
         </div>
       </div>
 
@@ -77,6 +141,7 @@ export default function ChatWindow({
               key={msg.id || idx} 
               message={msg.message} 
               isSelf={msg.sender_id === 'self'} 
+              onReport={msg.sender_id !== 'self' ? () => handleReportMessage(msg.id, msg.message) : undefined}
             />
           ))
         ) : (

@@ -1,23 +1,24 @@
 import { authClient } from '@/lib/auth/auth-client';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 export const authService = {
-  async signUp(email: string, password: string, fullName: string) {
+  async signUp(email: string, password: string, fullName: string, metadata?: any) {
     try {
-      const { data, error } = await authClient.signUp(email, password, fullName);
-      
+      const { data, error } = await authClient.signUp(email, password, fullName, metadata);
+
       // Dev mock fallback
       if (error && (email.includes('demo') || process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder'))) {
-        return { 
-          data: { 
-            user: { 
-              email, 
-              id: 'demo-user-id', 
-              user_metadata: { full_name: fullName, role: 'user' } 
+        const mockId = 'mock-user-' + Math.random().toString(36).substr(2, 9);
+        return {
+          data: {
+            user: {
+              email,
+              id: mockId,
+              user_metadata: { full_name: fullName, role: 'user', ...metadata }
             },
-            session: { access_token: 'demo-token', user: { email, id: 'demo-user-id' } }
-          }, 
-          error: null 
+            session: { access_token: 'mock-token-' + mockId, user: { email, id: mockId } }
+          },
+          error: null
         };
       }
       return { data, error };
@@ -29,48 +30,18 @@ export const authService = {
   async signInWithPassword(email: string, password: string) {
     try {
       const { data, error } = await authClient.signInWithPassword(email, password);
-      
+
       // Dev fallback mock check
       if (error && email === 'demo@gokul.com' && password === '123456') {
-        return { 
-          data: { 
+        return {
+          data: {
             user: { email, id: 'demo-user-id', user_metadata: { role: 'user' } },
             session: { access_token: 'demo-token', user: { email, id: 'demo-user-id' } }
-          }, 
-          error: null 
+          },
+          error: null
         };
       }
-      
-      return { data, error };
-    } catch (err: any) {
-      return { data: null, error: err };
-    }
-  },
 
-  async signInWithOtp(phone: string) {
-    try {
-      const { data, error } = await authClient.signInWithOtp(phone);
-      if (error && (phone.includes('1234') || phone.includes('demo') || process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder'))) {
-        return { data: { message: 'Demo OTP sent' }, error: null };
-      }
-      return { data, error };
-    } catch (err: any) {
-      return { data: null, error: err };
-    }
-  },
-
-  async verifyOtp(phoneOrEmail: string, token: string, type: 'sms' | 'signup') {
-    try {
-      const { data, error } = await authClient.verifyOtp(phoneOrEmail, token, type);
-      if (error && (token === '1234' || process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder'))) {
-        return { 
-          data: { 
-            user: { email: 'demo@gokul.com', id: 'demo-user-id', user_metadata: { role: 'user' } },
-            session: { access_token: 'demo-token', user: { email: 'demo@gokul.com', id: 'demo-user-id' } }
-          }, 
-          error: null 
-        };
-      }
       return { data, error };
     } catch (err: any) {
       return { data: null, error: err };
@@ -95,6 +66,32 @@ export const authService = {
 
   async getSession() {
     return await supabase.auth.getSession();
+  },
+
+  async checkEmailRegistered(email: string): Promise<boolean> {
+    try {
+      const configured = isSupabaseConfigured();
+
+      if (!configured) {
+        if (typeof window !== 'undefined') {
+          const users = JSON.parse(localStorage.getItem('gokul_mock_users') || '[]');
+          return users.some((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+        }
+        return false;
+      }
+
+      const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(email)}`, {
+        cache: 'no-store'
+      });
+      if (!res.ok) {
+        throw new Error('Failed to check email registration status');
+      }
+      const data = await res.json();
+      return !!data.registered;
+    } catch (err) {
+      console.error('Error checking email registration:', err);
+      throw err;
+    }
   }
 };
 

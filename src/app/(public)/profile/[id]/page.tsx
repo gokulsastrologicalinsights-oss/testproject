@@ -6,9 +6,12 @@ import { useRouter } from 'next/navigation';
 import { 
   Heart, Phone, ShieldCheck, Star, Sparkles, 
   ArrowLeft, CheckCircle2, ShieldAlert, Award, 
-  MapPin, Users, BookOpen, Clock, Mail, Ban
+  MapPin, Users, BookOpen, Clock, Mail, Ban,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import VerificationBadges from '@/components/ui/VerificationBadges';
+import { safetyService } from '@/services/safety.service';
 
 export default function ProfileView({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -18,12 +21,21 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isShortlisted, setIsShortlisted] = useState(false);
+  const [galleryImages, setGalleryImages] = useState<any[]>([]);
+  const [activeSlide, setActiveSlide] = useState(0);
   const [interestSent, setInterestSent] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [reported, setReported] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [contactDetails, setContactDetails] = useState({ email: '••••••@••••.com', phone: '+91 ••••• •••••' });
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [contactDetails, setContactDetails] = useState<{ email: string; phone: string; premiumLocked?: boolean }>({
+    email: '••••••@••••.com',
+    phone: '+91 ••••• •••••',
+    premiumLocked: false
+  });
+  const [isPremium, setIsPremium] = useState(false);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
   useEffect(() => {
     const fetchProfileDetails = async () => {
@@ -32,10 +44,10 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
         const { data: { user } } = await supabase.auth.getUser();
         setCurrentUser(user);
 
-        // 1. Fetch the target profile by profile_id
+        // 1. Fetch the target profile by profile_id, joining users table for digital verification flags
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('*')
+          .select('*, users(email_verified, mobile_verified)')
           .eq('profile_id', id)
           .maybeSingle();
 
@@ -45,12 +57,28 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
           return;
         }
 
-        // 2. Check blocks (two queries to bypass nested or parser checks)
+        // Resolve current user's database ID from auth_user_id and check premium status
+        let resolvedUserId = null;
         if (user) {
+          const { data: userRow } = await supabase
+            .from('users')
+            .select('id, role, profiles(is_premium)')
+            .eq('auth_user_id', user.id)
+            .maybeSingle();
+          resolvedUserId = userRow?.id || user.id;
+          setCurrentUserId(resolvedUserId);
+
+          const isProfilePremium = (userRow as any)?.profiles?.is_premium || false;
+          const isRolePremium = userRow?.role !== 'user' && userRow?.role !== 'free';
+          setIsPremium(isProfilePremium || isRolePremium);
+        }
+
+        // 2. Check blocks (two queries to bypass nested or parser checks)
+        if (user && resolvedUserId) {
           const { data: blocked1 } = await supabase
             .from('blocked_users')
             .select('*')
-            .eq('blocker_user_id', user.id)
+            .eq('blocker_user_id', resolvedUserId)
             .eq('blocked_user_id', profileData.user_id)
             .maybeSingle();
           
@@ -58,7 +86,7 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
             .from('blocked_users')
             .select('*')
             .eq('blocker_user_id', profileData.user_id)
-            .eq('blocked_user_id', user.id)
+            .eq('blocked_user_id', resolvedUserId)
             .maybeSingle();
 
           if (blocked1 || blocked2) {
@@ -71,7 +99,7 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
           const { data: req1 } = await supabase
             .from('match_requests')
             .select('*')
-            .eq('sender_user_id', user.id)
+            .eq('sender_user_id', resolvedUserId)
             .eq('receiver_user_id', profileData.user_id)
             .maybeSingle();
           
@@ -79,7 +107,7 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
             .from('match_requests')
             .select('*')
             .eq('sender_user_id', profileData.user_id)
-            .eq('receiver_user_id', user.id)
+            .eq('receiver_user_id', resolvedUserId)
             .maybeSingle();
 
           const request = req1 || req2;
@@ -91,33 +119,57 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
           }
         }
 
-        // 3. Fetch gallery profile picture
-        const { data: gallery } = await supabase
+        // 3. Fetch all approved gallery images for this candidate
+        const { data: galleryList } = await supabase
           .from('gallery_images')
-          .select('image_url')
+          .select('*')
           .eq('user_id', profileData.user_id)
-          .eq('is_profile_picture', true)
-          .limit(1)
-          .maybeSingle();
+          .eq('moderation_status', 'approved')
+          .order('sort_order', { ascending: true })
+          .order('uploaded_at', { ascending: true });
+
+        const imagesArray = galleryList || [];
+        setGalleryImages(imagesArray);
+
+        // Find primary profile photo or fall back to first image
+        const primaryImg = imagesArray.find((img: any) => img.is_profile_picture) || imagesArray[0];
 
         setProfile({
           ...profileData,
-          imageUrl: gallery?.image_url || null
+          imageUrl: primaryImg?.image_url || null
         });
 
         // 4. Check contact visibility
         const canViewContacts = connectionStatus === 'accepted';
         if (canViewContacts && user) {
-          const { data: targetUser } = await supabase
-            .from('users')
-            .select('email, mobile_number')
-            .eq('id', profileData.user_id)
-            .maybeSingle();
-          
-          if (targetUser) {
+          try {
+            const res = await fetch('/api/profile/contact-details', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ profileId: id }),
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              setContactDetails({
+                email: data.email || 'N/A',
+                phone: data.phone || 'N/A',
+                premiumLocked: false
+              });
+            } else {
+              setContactDetails({
+                email: '🔒 Premium Gated',
+                phone: '🔒 Premium Gated',
+                premiumLocked: true
+              });
+            }
+          } catch (err) {
+            console.error('Error fetching contact details API:', err);
             setContactDetails({
-              email: targetUser.email || 'N/A',
-              phone: targetUser.mobile_number || 'N/A'
+              email: 'Error loading details',
+              phone: 'Error loading details',
+              premiumLocked: false
             });
           }
         }
@@ -143,7 +195,7 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
       const { error } = await supabase
         .from('match_requests')
         .insert({
-          sender_user_id: currentUser.id,
+          sender_user_id: currentUserId,
           receiver_user_id: profile.user_id,
           status: 'pending'
         });
@@ -162,18 +214,11 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
 
   const handleBlockUser = async () => {
     if (!currentUser || !profile) return;
-    const confirmBlock = confirm(`Are you sure you want to block ${profile.first_name || 'this member'}? You will no longer see each other's profiles.`);
+    const confirmBlock = confirm(`Are you sure you want to block ${profile.first_name || 'this member'}? This will also remove any chat history or pending requests between you. Proceed?`);
     if (!confirmBlock) return;
 
     try {
-      const { error } = await supabase
-        .from('blocked_users')
-        .insert({
-          blocker_user_id: currentUser.id,
-          blocked_user_id: profile.user_id,
-          reason: 'Blocked from profile details page.'
-        });
-
+      const { error } = await safetyService.blockUser(profile.user_id, 'Blocked from profile page');
       if (error) {
         alert('Failed to block user: ' + error.message);
       } else {
@@ -187,19 +232,32 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
 
   const handleReportProfile = async () => {
     if (!currentUser || !profile) return;
-    const reason = prompt('Please specify why you are reporting this profile (e.g. fake photo, harassment, wrong information):');
+    
+    const catChoice = prompt(
+      'Select a report category (Enter number 1-5):\n' +
+      '1. Fake Profile\n' +
+      '2. Spam\n' +
+      '3. Harassment\n' +
+      '4. Inappropriate Content\n' +
+      '5. Other'
+    );
+    if (!catChoice) return;
+    
+    let category: 'Fake Profile' | 'Spam' | 'Harassment' | 'Inappropriate Content' | 'Other' = 'Other';
+    if (catChoice === '1') category = 'Fake Profile';
+    else if (catChoice === '2') category = 'Spam';
+    else if (catChoice === '3') category = 'Harassment';
+    else if (catChoice === '4') category = 'Inappropriate Content';
+    else if (catChoice === '5') category = 'Other';
+    else {
+      alert('Invalid choice. Categorized as "Other".');
+    }
+
+    const reason = prompt('Please describe the reason for this report:');
     if (!reason) return;
 
     try {
-      const { error } = await supabase
-        .from('reports')
-        .insert({
-          reporter_user_id: currentUser.id,
-          reported_user_id: profile.user_id,
-          reason: reason,
-          status: 'pending'
-        });
-
+      const { error } = await safetyService.reportProfile(profile.user_id, category, reason);
       if (error) {
         alert('Failed to file report: ' + error.message);
       } else {
@@ -272,19 +330,49 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
         
         {/* Photo Container with Watermark */}
         <div className="md:w-1/3 bg-gradient-to-tr from-sandal-100 to-rose-50 dark:from-zinc-850 dark:to-zinc-900 p-6 flex flex-col items-center justify-center relative min-h-[250px] overflow-hidden select-none">
-          {profile.imageUrl ? (
-            <div className="relative group">
+          {galleryImages.length > 0 ? (
+            <div className="relative w-full aspect-[3/4] max-w-[200px] rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 shadow-md">
               <img 
-                src={profile.imageUrl} 
-                alt={fullName} 
-                className="h-32 w-32 rounded-full object-cover border-2 border-gold-400 shadow-md pointer-events-none select-none"
+                src={galleryImages[activeSlide].image_url} 
+                alt={`${fullName} - Photo ${activeSlide + 1}`} 
+                className="w-full h-full object-cover pointer-events-none select-none"
               />
               {/* Security Image Watermark */}
-              <div className="absolute inset-0 rounded-full bg-black/10 flex items-center justify-center pointer-events-none select-none overflow-hidden">
-                <span className="text-[9px] font-black text-white/50 tracking-widest rotate-45 scale-110 uppercase">
+              <div className="absolute inset-0 bg-black/5 flex items-center justify-center pointer-events-none select-none overflow-hidden">
+                <span className="text-[9px] font-black text-white/30 tracking-widest rotate-45 scale-110 uppercase">
                   GOKUL VIVAHAM
                 </span>
               </div>
+              
+              {/* Slider Overlays */}
+              {galleryImages.length > 1 && (
+                <>
+                  <button 
+                    onClick={() => setActiveSlide(prev => (prev === 0 ? galleryImages.length - 1 : prev - 1))}
+                    className="absolute left-1.5 top-1/2 transform -translate-y-1/2 w-6.5 h-6.5 rounded-full bg-black/60 hover:bg-black/85 flex items-center justify-center text-white cursor-pointer transition-colors shadow"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <button 
+                    onClick={() => setActiveSlide(prev => (prev === galleryImages.length - 1 ? 0 : prev + 1))}
+                    className="absolute right-1.5 top-1/2 transform -translate-y-1/2 w-6.5 h-6.5 rounded-full bg-black/60 hover:bg-black/85 flex items-center justify-center text-white cursor-pointer transition-colors shadow"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                  
+                  {/* Dots Indicator */}
+                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1 bg-black/50 px-2 py-0.5 rounded-full border border-zinc-800/10">
+                    {galleryImages.map((_, idx) => (
+                      <span 
+                        key={idx} 
+                        className={`h-1.5 rounded-full transition-all ${
+                          idx === activeSlide ? 'w-3 bg-gold-400' : 'w-1.5 bg-zinc-400'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="h-32 w-32 rounded-full bg-sandal-200/50 dark:bg-zinc-800 border-2 border-gold-400/20 flex items-center justify-center font-serif text-3xl font-bold text-maroon-700 dark:text-gold-450 shadow-inner">
@@ -292,11 +380,9 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
             </div>
           )}
           
-          {profile.is_verified && (
-            <div className="absolute top-4 left-4 px-2.5 py-0.5 rounded-full bg-emerald-600 text-[9px] font-bold text-white uppercase tracking-widest flex items-center gap-1 shadow-sm">
-              <CheckCircle2 className="h-3 w-3" /> Verified Profile
-            </div>
-          )}
+          <div className="absolute top-4 left-4">
+            <VerificationBadges profile={profile} size="sm" />
+          </div>
 
           <div className="absolute bottom-4 right-4 bg-maroon-500/90 text-white px-3 py-1 rounded-full text-xs font-bold shadow flex items-center gap-1">
             <Sparkles className="h-3.5 w-3.5 text-gold-400" /> {profile.age} Yrs • Match
@@ -316,6 +402,8 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
             <span className="text-sm font-semibold text-gold-650 dark:text-gold-400 uppercase tracking-widest">
               {profile.education || 'Education Details Pending'} • {profile.city || 'Location Pending'}
             </span>
+
+            <VerificationBadges profile={profile} size="md" className="mt-1" />
 
             <p className="text-xs text-zinc-550 dark:text-zinc-450 font-light mt-1">
               Astrology Matching: <span className="font-semibold text-gold-600 dark:text-gold-450">Traditional compatibility check active</span>
@@ -417,16 +505,33 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
             </span>
             
             {connectionStatus === 'accepted' ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-light text-zinc-655 dark:text-zinc-400 animate-in fade-in duration-300">
-                <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-850 pb-2">
-                  <Phone className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">{contactDetails.phone}</span>
+              contactDetails.premiumLocked ? (
+                <div className="flex flex-col gap-3 items-center text-center p-3">
+                  <p className="text-xs font-semibold text-amber-600 dark:text-gold-450 leading-relaxed flex items-center gap-1">
+                    🔒 Premium Upgrade Required
+                  </p>
+                  <p className="text-xs font-light text-zinc-500 dark:text-zinc-450 leading-relaxed">
+                    Your connection request is accepted, but viewing direct contact details is reserved for Premium Members.
+                  </p>
+                  <button
+                    onClick={() => setShowUpgradePrompt(true)}
+                    className="px-4 py-2 luxury-gradient text-white text-[10px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all cursor-pointer focus:outline-none"
+                  >
+                    Upgrade to View Contacts
+                  </button>
                 </div>
-                <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-850 pb-2">
-                  <Mail className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">{contactDetails.email}</span>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-light text-zinc-655 dark:text-zinc-400 animate-in fade-in duration-300">
+                  <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-850 pb-2">
+                    <Phone className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">{contactDetails.phone}</span>
+                  </div>
+                  <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-850 pb-2">
+                    <Mail className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">{contactDetails.email}</span>
+                  </div>
                 </div>
-              </div>
+              )
             ) : (
               <div className="flex flex-col gap-2.5 text-center p-3">
                 <p className="text-xs font-light text-zinc-500 dark:text-zinc-450 leading-relaxed">
@@ -450,28 +555,50 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
               <Award className="h-4 w-4 shrink-0" /> Horoscopic Details
             </span>
             
-            <div className="flex flex-col gap-2.5 text-xs font-light text-zinc-650 dark:text-zinc-400">
-              <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
-                <span className="font-semibold text-zinc-850 dark:text-zinc-200">Rasi:</span>
-                <span>{profile.rasi || 'N/A'}</span>
+            {isPremium ? (
+              <div className="flex flex-col gap-2.5 text-xs font-light text-zinc-655 dark:text-zinc-400 animate-in fade-in duration-300">
+                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
+                  <span className="font-semibold text-zinc-850 dark:text-zinc-200">Rasi:</span>
+                  <span>{profile.rasi || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
+                  <span className="font-semibold text-zinc-855 dark:text-zinc-200">Star / Nakshatra:</span>
+                  <span>{profile.nakshatra || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
+                  <span className="font-semibold text-zinc-855 dark:text-zinc-200">Gothram:</span>
+                  <span>{profile.gothram || 'N/A'}</span>
+                </div>
               </div>
-              <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
-                <span className="font-semibold text-zinc-855 dark:text-zinc-200">Star / Nakshatra:</span>
-                <span>{profile.nakshatra || 'N/A'}</span>
+            ) : (
+              <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950/20 border border-zinc-100 dark:border-zinc-850/50 text-center flex flex-col gap-2">
+                <span className="text-xs text-zinc-400 font-light italic">🔒 Astro coordinates gated (Premium only)</span>
+                <button
+                  onClick={() => setShowUpgradePrompt(true)}
+                  className="text-[10px] font-bold text-gold-650 hover:underline uppercase tracking-wider cursor-pointer focus:outline-none"
+                >
+                  Unlock Astro Details
+                </button>
               </div>
-              <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-850 pb-2">
-                <span className="font-semibold text-zinc-855 dark:text-zinc-200">Gothram:</span>
-                <span>{profile.gothram || 'N/A'}</span>
-              </div>
-            </div>
+            )}
 
             <div className="h-px bg-zinc-100 dark:bg-zinc-850 my-2" />
 
             <button
-              onClick={() => alert(`Horoscope download initiated for Profile ID ${profile.profile_id}`)}
-              className="w-full py-2.5 rounded-xl border border-gold-500/30 text-center text-xs font-bold text-gold-650 dark:text-gold-400 hover:bg-gold-500/5 transition-all cursor-pointer"
+              onClick={() => {
+                if (isPremium) {
+                  alert(`Horoscope download initiated for Profile ID ${profile.profile_id}`);
+                } else {
+                  setShowUpgradePrompt(true);
+                }
+              }}
+              className={`w-full py-2.5 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
+                isPremium 
+                  ? "border-gold-500/30 text-gold-650 dark:text-gold-400 hover:bg-gold-500/5" 
+                  : "border-zinc-200 dark:border-zinc-800 text-zinc-450 hover:bg-zinc-50 dark:hover:bg-zinc-850/20"
+              }`}
             >
-              Download Horoscope PDF
+              {isPremium ? "Download Horoscope PDF" : "🔒 Unlock Horoscope Download"}
             </button>
           </div>
 
@@ -496,6 +623,34 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
 
       </div>
 
+      {/* UPGRADE PROMPT MODAL */}
+      {showUpgradePrompt && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-zinc-900 border border-sandal-200 dark:border-zinc-800 rounded-3xl shadow-2xl p-6 max-w-sm flex flex-col gap-4 text-center">
+            <div className="luxury-gradient w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold mx-auto shadow-md">
+              ★
+            </div>
+            <h3 className="text-lg font-serif font-bold text-zinc-900 dark:text-zinc-50">Unlock Premium Matchmaking</h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed font-light">
+              Advanced filters, detailed horoscope coordinates, and verified contacts are reserved for Premium Members. Choose a plan and connect with compatibility.
+            </p>
+            <div className="flex gap-3 justify-center mt-2">
+              <button
+                onClick={() => setShowUpgradePrompt(false)}
+                className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 text-zinc-650 dark:text-zinc-400 text-xs font-semibold uppercase rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-950/20 cursor-pointer focus:outline-none"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={() => { setShowUpgradePrompt(false); router.push('/dashboard/subscription'); }}
+                className="px-5 py-2 luxury-gradient text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow cursor-pointer focus:outline-none"
+              >
+                Upgrade Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

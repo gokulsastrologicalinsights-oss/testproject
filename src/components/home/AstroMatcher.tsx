@@ -69,7 +69,7 @@ export default function AstroMatcher() {
               <select 
                 value={rasi1} 
                 onChange={(e) => { setRasi1(e.target.value); setCompatibilityScore(null); }}
-                className="w-full h-10 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-850 dark:text-zinc-150"
+                className="w-full h-10 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-white"
               >
                 {rasis.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
@@ -80,7 +80,7 @@ export default function AstroMatcher() {
               <select 
                 value={rasi2} 
                 onChange={(e) => { setRasi2(e.target.value); setCompatibilityScore(null); }}
-                className="w-full h-10 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-850 dark:text-zinc-150"
+                className="w-full h-10 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-white"
               >
                 {rasis.map(r => <option key={r} value={r}>{r}</option>)}
               </select>

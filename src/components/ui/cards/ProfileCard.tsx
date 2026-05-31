@@ -3,6 +3,7 @@
 import { Heart, CheckCircle2, Star, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import VerificationBadges from '@/components/ui/VerificationBadges';
 
 interface ProfileCardProps {
   profile: any;
@@ -38,17 +39,8 @@ export default function ProfileCard({
         <User className="h-16 w-16 text-maroon-500/10 dark:text-zinc-700" />
         
         {/* Badges */}
-        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5 z-10">
-          {isVerifiedUser && (
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-600/90 backdrop-blur-sm text-[9px] font-bold text-white flex items-center gap-1 uppercase tracking-wider shadow">
-              <CheckCircle2 className="h-3 w-3" /> Verified
-            </span>
-          )}
-          {isPremiumUser && (
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-600/90 backdrop-blur-sm text-[9px] font-bold text-white flex items-center gap-1 uppercase tracking-wider shadow">
-              <Star className="h-3 w-3 fill-white" /> Premium
-            </span>
-          )}
+        <div className="absolute top-2.5 left-2.5 z-10">
+          <VerificationBadges profile={profile} size="sm" />
         </div>
 
         {/* Compatibility badge */}

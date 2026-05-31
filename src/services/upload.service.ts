@@ -7,7 +7,7 @@ const isMockMode = () => {
 };
 
 export const uploadService = {
-  async uploadFile(file: File, bucket: 'horoscopes' | 'photos') {
+  async uploadFile(file: File, bucket: 'horoscopes' | 'photos' | 'id-proofs') {
     try {
       // 1. File size validation (< 5MB)
       const maxSizeBytes = 5 * 1024 * 1024;
@@ -26,6 +26,11 @@ export const uploadService = {
         if (!allowedTypes.includes(file.type)) {
           throw new Error('Invalid file type. Only PDF documents are permitted for horoscopes.');
         }
+      } else if (bucket === 'id-proofs') {
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+        if (!allowedTypes.includes(file.type)) {
+          throw new Error('Invalid file type. Only JPEG, PNG, WebP, and PDF documents are permitted for ID proofs.');
+        }
       }
 
       if (isMockMode()) {
@@ -34,6 +39,11 @@ export const uploadService = {
           return { 
             url: 'https://gokul-vivaham.supabase/mock_horoscope.pdf', 
             error: null 
+          };
+        } else if (bucket === 'id-proofs') {
+          return {
+            url: 'https://gokul-vivaham.supabase/mock_id_proof.pdf',
+            error: null
           };
         }
         
@@ -59,6 +69,12 @@ export const uploadService = {
 
       if (error) throw error;
 
+      // For private buckets like id-proofs, we return the relative file path to generate signed URLs later.
+      // For public buckets, we return the public URL.
+      if (bucket === 'id-proofs') {
+        return { url: filePath, error: null };
+      }
+
       const { data: { publicUrl } } = supabase.storage
         .from(bucket)
         .getPublicUrl(filePath);
@@ -70,7 +86,7 @@ export const uploadService = {
     }
   },
 
-  async uploadBase64(base64Data: string, bucket: 'horoscopes' | 'photos') {
+  async uploadBase64(base64Data: string, bucket: 'horoscopes' | 'photos' | 'id-proofs') {
     try {
       const parts = base64Data.split(';base64,');
       if (parts.length < 2) {
@@ -96,6 +112,11 @@ export const uploadService = {
         const allowedTypes = ['application/pdf'];
         if (!allowedTypes.includes(contentType)) {
           throw new Error('Invalid file type. Only PDF documents are permitted for horoscopes.');
+        }
+      } else if (bucket === 'id-proofs') {
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+        if (!allowedTypes.includes(contentType)) {
+          throw new Error('Invalid file type. Only JPEG, PNG, WebP, and PDF documents are permitted for ID proofs.');
         }
       }
 
@@ -130,6 +151,10 @@ export const uploadService = {
 
       if (error) throw error;
 
+      if (bucket === 'id-proofs') {
+        return { url: filePath, error: null };
+      }
+
       const { data: { publicUrl } } = supabase.storage
         .from(bucket)
         .getPublicUrl(filePath);
@@ -137,6 +162,29 @@ export const uploadService = {
       return { url: publicUrl, error: null };
     } catch (err: any) {
       console.error(`Base64 Upload failed for bucket ${bucket}:`, err);
+      return { url: null, error: err };
+    }
+  },
+
+  async getSignedUrl(bucket: 'horoscopes' | 'photos' | 'id-proofs', filePath: string, expiresIn = 900) {
+    try {
+      if (isMockMode()) {
+        return { url: filePath, error: null };
+      }
+      
+      // If filePath starts with http, it is already a public URL or base64 mock
+      if (filePath.startsWith('http') || filePath.startsWith('data:')) {
+        return { url: filePath, error: null };
+      }
+
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(filePath, expiresIn);
+
+      if (error) throw error;
+      return { url: data.signedUrl, error: null };
+    } catch (err: any) {
+      console.error(`Error generating signed URL for bucket ${bucket}:`, err);
       return { url: null, error: err };
     }
   }

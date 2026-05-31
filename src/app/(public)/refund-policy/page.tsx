@@ -1,6 +1,7 @@
 'use client';
 
 import { ShieldCheck, Receipt, RotateCcw, AlertTriangle } from 'lucide-react';
+import { contactConfig } from '@/config/contact.config';
 
 export default function RefundPolicy() {
   return (
@@ -38,7 +39,7 @@ export default function RefundPolicy() {
           <AlertTriangle className="h-5 w-5" /> 3. Duplicate Payments
         </div>
         <p>
-          In the event of double billing or duplicate transactions caused by payment gateway failures, users must report the issue to our support team at <span className="font-semibold text-maroon-600 dark:text-gold-450">payments@gokulvivaham.com</span> within **7 days** of transaction completion. After verifying the transaction log, any duplicate payment will be refunded to the original payment source within 5–7 working days.
+          In the event of double billing or duplicate transactions caused by payment gateway failures, users must report the issue to our support team at <a href={contactConfig.email.link} className="font-semibold text-maroon-600 dark:text-gold-450 hover:underline">{contactConfig.email.support}</a> within **7 days** of transaction completion. After verifying the transaction log, any duplicate payment will be refunded to the original payment source within 5–7 working days.
         </p>
 
         <div className="flex items-center gap-2 text-maroon-700 dark:text-gold-400 font-serif font-bold text-lg border-b border-zinc-100 dark:border-zinc-850 pb-2">

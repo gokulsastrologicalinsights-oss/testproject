@@ -85,6 +85,11 @@ export default function About() {
         </p>
         <Link
           href="/register"
+          onClick={() => {
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('gokul_matrimony_register_draft');
+            }
+          }}
           className="px-6 py-2.5 rounded-full bg-white text-maroon-700 text-xs font-semibold uppercase tracking-wider hover:bg-zinc-50 hover:scale-105 transition-all shadow-md"
         >
           Register Free Now

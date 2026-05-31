@@ -3,11 +3,12 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Heart, Mail, Phone, MapPin } from 'lucide-react';
+import { contactConfig } from '@/config/contact.config';
 
 export default function Footer() {
   const pathname = usePathname();
 
-  if (pathname?.startsWith('/admin/dashboard') || pathname?.startsWith('/admin/login')) {
+  if (pathname?.startsWith('/admin')) {
     return null;
   }
   return (
@@ -34,7 +35,7 @@ export default function Footer() {
             <div className="flex items-center gap-2 mt-2">
               {/* WhatsApp direct contact */}
               <a
-                href="https://wa.me/919876543210?text=I'm%20interested%20in%20Gokul%20Vivaham%20services"
+                href={contactConfig.whatsapp.link}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-semibold transition-all shadow-sm hover:scale-105 duration-200"
@@ -57,7 +58,15 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/register" className="hover:text-maroon-500 dark:hover:text-gold-400 transition-colors">
+                <Link 
+                  href="/register" 
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      localStorage.removeItem('gokul_matrimony_register_draft');
+                    }
+                  }}
+                  className="hover:text-maroon-500 dark:hover:text-gold-400 transition-colors"
+                >
                   Create Account
                 </Link>
               </li>
@@ -103,18 +112,22 @@ export default function Footer() {
             <h4 className="text-xs font-semibold text-maroon-600 dark:text-gold-400 uppercase tracking-widest">
               Gokul Offices
             </h4>
-            <ul className="space-y-3 text-sm text-zinc-600 dark:text-zinc-400">
+            <ul className="space-y-3 text-sm text-zinc-650 dark:text-zinc-400">
               <li className="flex items-start gap-2">
                 <MapPin className="h-4 w-4 text-maroon-500 dark:text-gold-400 mt-0.5 shrink-0" />
-                <span>12, Temple View Avenue, Mylapore, Chennai, Tamil Nadu - 600004</span>
+                <span className="leading-relaxed">{contactConfig.address.display}</span>
               </li>
               <li className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-maroon-500 dark:text-gold-400 shrink-0" />
-                <span>+91 98765 43210</span>
+                <a href={contactConfig.phone.link} className="hover:underline hover:text-maroon-600 dark:hover:text-gold-400 font-semibold">
+                  {contactConfig.phone.display}
+                </a>
               </li>
               <li className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-maroon-500 dark:text-gold-400 shrink-0" />
-                <span>support@gokulvivaham.com</span>
+                <a href={contactConfig.email.link} className="hover:underline hover:text-maroon-600 dark:hover:text-gold-400 font-semibold break-all">
+                  {contactConfig.email.support}
+                </a>
               </li>
             </ul>
           </div>

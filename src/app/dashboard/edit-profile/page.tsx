@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { uploadService } from '@/services/upload.service';
+import { useProfileStore } from '@/stores/profileStore';
 
 export default function Profile() {
   
@@ -18,6 +19,7 @@ export default function Profile() {
     fullName: '',
     email: '',
     mobileNumber: '',
+    gender: '',
     dob: '',
     age: '',
     maritalStatus: 'Never Married',
@@ -57,12 +59,21 @@ export default function Profile() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        setUserId(user.id);
+
+        // Resolve user's database ID from auth_user_id
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+
+        const currentUserId = userRow?.id || user.id;
+        setUserId(currentUserId);
 
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', currentUserId)
           .maybeSingle();
 
         if (data) {
@@ -70,6 +81,7 @@ export default function Profile() {
             fullName: `${data.first_name || ''} ${data.last_name || ''}`.trim(),
             email: user.email || '',
             mobileNumber: data.mobile_number || '',
+            gender: data.gender || '',
             dob: data.date_of_birth || '',
             age: (data.age || '').toString(),
             maritalStatus: data.marital_status || 'Never Married',
@@ -102,7 +114,7 @@ export default function Profile() {
           const { data: gallery } = await supabase
             .from('gallery_images')
             .select('image_url')
-            .eq('user_id', user.id)
+            .eq('user_id', currentUserId)
             .eq('is_profile_picture', true)
             .limit(1)
             .maybeSingle();
@@ -118,6 +130,20 @@ export default function Profile() {
     loadProfile();
   }, []);
 
+  // Age auto calculate from dob
+  useEffect(() => {
+    if (formData.dob) {
+      const birthDate = new Date(formData.dob);
+      const today = new Date();
+      let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        calculatedAge--;
+      }
+      setFormData(prev => ({ ...prev, age: calculatedAge.toString() }));
+    }
+  }, [formData.dob]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -125,18 +151,64 @@ export default function Profile() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userId) return;
     setSaving(true);
     setSuccess('');
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User session not found. Please log in again.');
+      }
+
+      // 1. Resolve or create user row in public.users
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+
+      let currentUserId = userRow?.id;
+
+      if (!currentUserId) {
+        // Create public user row if missing
+        const { data: newUserRow, error: userCreateErr } = await supabase
+          .from('users')
+          .insert({
+            id: user.id,
+            auth_user_id: user.id,
+            email: user.email,
+            role: 'user',
+            status: 'active'
+          })
+          .select('id')
+          .maybeSingle();
+
+        if (userCreateErr) {
+          throw new Error('Failed to initialize user record: ' + userCreateErr.message);
+        }
+        currentUserId = newUserRow?.id || user.id;
+        setUserId(currentUserId);
+      }
+
       const parts = formData.fullName.split(' ');
       const firstName = parts[0] || '';
       const lastName = parts.slice(1).join(' ') || '';
 
+      // 2. Resolve or generate profile_id
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id, profile_id')
+        .eq('user_id', currentUserId)
+        .maybeSingle();
+
+      const profileId = existingProfile?.profile_id || `GV${Math.floor(100000 + Math.random() * 900000)}`;
+
       const payload = {
+        user_id: currentUserId,
+        profile_id: profileId,
         first_name: firstName,
         last_name: lastName,
+        gender: formData.gender || null,
         date_of_birth: formData.dob || null,
         age: formData.age ? parseInt(formData.age) : null,
         marital_status: formData.maritalStatus,
@@ -166,10 +238,29 @@ export default function Profile() {
         partner_expectations: formData.partnerExpectations
       };
 
-      const { error } = await supabase
-        .from('profiles')
-        .update(payload)
-        .eq('user_id', userId);
+      let error;
+      if (existingProfile) {
+        const { data: updatedData, error: updateErr } = await supabase
+          .from('profiles')
+          .update(payload)
+          .eq('user_id', currentUserId)
+          .select()
+          .maybeSingle();
+        error = updateErr;
+        if (!error && updatedData) {
+          useProfileStore.setState({ profile: updatedData });
+        }
+      } else {
+        const { data: insertedData, error: insertErr } = await supabase
+          .from('profiles')
+          .insert(payload)
+          .select()
+          .maybeSingle();
+        error = insertErr;
+        if (!error && insertedData) {
+          useProfileStore.setState({ profile: insertedData });
+        }
+      }
 
       if (error) {
         alert('Failed to save profile changes: ' + error.message);
@@ -339,6 +430,97 @@ export default function Profile() {
                   value={formData.mobileNumber}
                   disabled
                   className="h-11 px-3.5 rounded-lg border border-zinc-200 dark:border-zinc-850 bg-zinc-50 dark:bg-zinc-850 text-sm focus:outline-none text-zinc-550"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Gender</label>
+                <select
+                  name="gender"
+                  value={formData.gender}
+                  onChange={handleChange}
+                  className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-100"
+                >
+                  <option value="" className="text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-900">Select Gender</option>
+                  <option value="Female" className="text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-900">Female</option>
+                  <option value="Male" className="text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-900">Male</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Date of Birth</label>
+                <input
+                  type="date"
+                  name="dob"
+                  value={formData.dob}
+                  onChange={handleChange}
+                  className="h-11 px-3.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-100"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Marital Status</label>
+                <select
+                  name="maritalStatus"
+                  value={formData.maritalStatus}
+                  onChange={handleChange}
+                  className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-100"
+                >
+                  <option value="Never Married" className="text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-900">Never Married</option>
+                  <option value="Widowed" className="text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-900">Widowed</option>
+                  <option value="Divorced" className="text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-900">Divorced</option>
+                  <option value="Awaiting Divorce" className="text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-900">Awaiting Divorce</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Mother Tongue</label>
+                <input 
+                  type="text" 
+                  name="motherTongue"
+                  value={formData.motherTongue}
+                  onChange={handleChange}
+                  placeholder="e.g. Tamil"
+                  className="h-11 px-3.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-100"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Religion</label>
+                <select
+                  name="religion"
+                  value={formData.religion}
+                  onChange={handleChange}
+                  className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-100"
+                >
+                  <option value="Hindu" className="text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-900">Hindu</option>
+                  <option value="Christian" className="text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-900">Christian</option>
+                  <option value="Muslim" className="text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-900">Muslim</option>
+                  <option value="Other" className="text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-900">Other</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Caste / Community</label>
+                <input 
+                  type="text" 
+                  name="caste"
+                  value={formData.caste}
+                  onChange={handleChange}
+                  placeholder="e.g. Iyer, Naidu, Pillai"
+                  className="h-11 px-3.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-100"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1 md:col-span-2 text-left">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Sub Caste</label>
+                <input 
+                  type="text" 
+                  name="subCaste"
+                  value={formData.subCaste}
+                  onChange={handleChange}
+                  placeholder="e.g. Vadama, Vadagalai"
+                  className="h-11 px-3.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-100"
                 />
               </div>
 

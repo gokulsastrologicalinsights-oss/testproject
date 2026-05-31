@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { adminService } from '@/services/admin.service';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -111,60 +112,8 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleAdminSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-      router.push('/admin/login');
-    } catch (e: any) {
-      alert('Error signing out: ' + e.message);
-    }
-  };
-
   return (
-    <div className="flex-1 w-full min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans transition-colors">
-      
-      {/* ADMIN HEADER */}
-      <header className="h-20 border-b border-zinc-800 bg-zinc-900/60 backdrop-blur px-6 flex items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center text-gold-500">
-            <ShieldAlert className="h-5 w-5" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-base font-serif font-bold text-white">Gokul Vivaham Control Panel</span>
-            <span className="text-[10px] text-zinc-500 font-mono">SYS STATUS: SECURED</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-6">
-          {/* Mock notifications */}
-          <button className="p-2 rounded-full hover:bg-zinc-800 text-zinc-400 relative">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-600" />
-          </button>
-          
-          {/* Admin profile */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center font-bold text-sm text-gold-400">
-              AD
-            </div>
-            <div className="hidden sm:flex flex-col text-left">
-              <span className="text-xs font-semibold text-zinc-200">Gokul Admin</span>
-              <span className="text-[10px] text-gold-500">System Operator</span>
-            </div>
-          </div>
-
-          <button
-            onClick={handleAdminSignOut}
-            className="p-2 rounded-full border border-zinc-800 hover:bg-zinc-800 text-zinc-400 cursor-pointer"
-            title="Sign Out"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
-      </header>
-
-      {/* DASHBOARD BODY */}
-      <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col gap-8">
+    <div className="p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col gap-8">
         
         {/* STATS OVERVIEW CARDS */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
@@ -366,8 +315,6 @@ export default function AdminDashboard() {
             </table>
           </div>
         </div>
-
-      </main>
 
     </div>
   );

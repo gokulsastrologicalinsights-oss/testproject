@@ -22,6 +22,7 @@ export default function RegisterStepper() {
   const totalSteps = 5;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
+  const [awaitingEmailConfirmation, setAwaitingEmailConfirmation] = useState(false);
 
   // Compliance Consent States
   const [consentEligibility, setConsentEligibility] = useState(false);
@@ -36,7 +37,6 @@ export default function RegisterStepper() {
     gender: '',
     dob: '',
     age: '',
-    mobileNumber: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -80,8 +80,6 @@ export default function RegisterStepper() {
   const [horoscopeFile, setHoroscopeFile] = useState<File | null>(null);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
-  // OTP State
-  const [isOtpVerified, setIsOtpVerified] = useState(false);
   
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -148,8 +146,6 @@ export default function RegisterStepper() {
       if (formData.age && parseInt(formData.age) < 18) {
         stepErrors.dob = 'Must be at least 18 years old to register';
       }
-      if (!formData.mobileNumber) stepErrors.mobileNumber = 'Mobile number is required';
-      if (!isOtpVerified) stepErrors.mobileNumber = 'Please verify mobile number with OTP';
       if (!formData.email) {
         stepErrors.email = 'Email address is required';
       } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
@@ -182,8 +178,31 @@ export default function RegisterStepper() {
     return Object.keys(stepErrors).length === 0;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (validateStep(currentStep)) {
+      if (currentStep === 1) {
+        setIsSubmitting(true);
+        try {
+          const isRegistered = await authService.checkEmailRegistered(formData.email);
+          if (isRegistered) {
+            setErrors(prev => ({
+              ...prev,
+              email: 'This email is already registered. Please login instead.'
+            }));
+            setIsSubmitting(false);
+            return;
+          }
+        } catch (err: any) {
+          setErrors(prev => ({
+            ...prev,
+            email: 'Unable to verify email availability. Please try again.'
+          }));
+          setIsSubmitting(false);
+          return;
+        }
+        setIsSubmitting(false);
+      }
+
       setCurrentStep(prev => Math.min(prev + 1, totalSteps));
       window.scrollTo(0, 0);
     }
@@ -205,25 +224,7 @@ export default function RegisterStepper() {
     setErrors({});
 
     try {
-      // 1. Sign up user in Supabase Auth
-      const { data: signUpData, error: signUpError } = await authService.signUp(
-        formData.email,
-        formData.password,
-        formData.fullName
-      );
-      
-      if (signUpError) {
-        setErrors(prev => ({ ...prev, termsAccepted: signUpError.message || 'Registration failed.' }));
-        setIsSubmitting(false);
-        return;
-      }
-
-      const authUserId = signUpData?.user?.id;
-      if (!authUserId) {
-        throw new Error('Failed to retrieve user ID from auth registration.');
-      }
-
-      // 2. Upload Files (Horoscope and Profile Photo) to Storage
+      // 1. Upload Files (Horoscope and Profile Photo) to Storage first
       let horoscopeUrl = '';
       let profilePhotoUrl = '';
 
@@ -245,22 +246,7 @@ export default function RegisterStepper() {
         }
       }
 
-      // 3. Create Custom public.users Row
-      const { data: userRecord, error: userError } = await profileService.createUser({
-        id: authUserId,
-        auth_user_id: authUserId,
-        email: formData.email,
-        mobile_number: formData.mobileNumber
-      });
-
-      if (userError) {
-        console.error('Error creating public user row:', userError);
-        throw new Error(userError.message || 'Failed to create user record.');
-      }
-
-      const publicUserId = userRecord?.id || authUserId;
-
-      // Log consents for DPDP Act Compliance
+      // 2. Log consents metadata and IP details for DPDP Act Compliance
       let clientIp = '127.0.0.1';
       try {
         const ipRes = await fetch('https://api.ipify.org?format=json').then(r => r.json());
@@ -271,123 +257,94 @@ export default function RegisterStepper() {
         console.warn('Could not fetch client IP, using fallback:', ipErr);
       }
 
-      const consents = [
-        { type: 'eligibility', val: consentEligibility },
-        { type: 'terms_privacy', val: consentTermsPrivacy },
-        { type: 'data_processing', val: consentProcessing },
-        { type: 'info_accuracy', val: consentAccuracy }
-      ];
-
-      for (const item of consents) {
-        const { error: consentErr } = await supabase
-          .from('consent_logs')
-          .insert({
-            user_id: publicUserId,
-            consent_type: item.type,
-            accepted: item.val,
-            policy_version: '1.0',
-            ip_address: clientIp,
-            device_metadata: typeof navigator !== 'undefined' ? navigator.userAgent : 'Server-side/Unknown'
-          });
-        
-        if (consentErr) {
-          console.error(`Consent log failed for ${item.type}:`, consentErr);
-        }
-      }
-
-      // 4. Create public.profiles Row
-      const parts = formData.fullName.split(' ');
-      const firstName = parts[0] || '';
-      const lastName = parts.slice(1).join(' ') || '';
-      const profileId = `GV${Math.floor(100000 + Math.random() * 900000)}`;
-
-      const profilePayload = {
-        user_id: publicUserId,
-        profile_id: profileId,
-        first_name: firstName,
-        last_name: lastName,
+      const registrationMetadata = {
         gender: formData.gender,
-        date_of_birth: formData.dob || null,
-        age: formData.age ? parseInt(formData.age) : null,
-        marital_status: formData.maritalStatus || null,
-        religion: formData.religion || null,
-        caste: formData.caste || null,
-        sub_caste: formData.subCaste || null,
-        mother_tongue: formData.motherTongue || null,
-        rasi: formData.rasi || null,
-        nakshatra: formData.star || null,
-        gothram: formData.gothram || null,
-        height_cm: formData.height ? parseInt(formData.height) : null,
-        weight_kg: formData.weight ? parseInt(formData.weight) : null,
-        physical_status: formData.physicalStatus || null,
-        education: formData.education || null,
-        occupation: formData.occupation || null,
-        company_name: formData.companyName || null,
-        annual_income: formData.annualIncome ? parseFloat(formData.annualIncome) : null,
-        city: formData.workLocation || null,
-        native_place: formData.nativePlace || null,
-        father_name: formData.fatherName || null,
-        father_occupation: formData.fatherOccupation || null,
-        mother_name: formData.motherName || null,
-        mother_occupation: formData.motherOccupation || null,
-        siblings: formData.siblings || null,
-        family_type: formData.familyType || null,
-        about_me: formData.aboutMe || null,
-        partner_expectations: formData.partnerExpectations || null,
-        is_verified: false,
-        is_premium: false,
-        profile_completion: 40
+        dob: formData.dob,
+        age: formData.age,
+        maritalStatus: formData.maritalStatus,
+        religion: formData.religion,
+        caste: formData.caste,
+        subCaste: formData.subCaste,
+        motherTongue: formData.motherTongue,
+        star: formData.star,
+        rasi: formData.rasi,
+        gothram: formData.gothram,
+        height: formData.height,
+        weight: formData.weight,
+        physicalStatus: formData.physicalStatus,
+        education: formData.education,
+        occupation: formData.occupation,
+        companyName: formData.companyName,
+        annualIncome: formData.annualIncome,
+        workLocation: formData.workLocation,
+        nativePlace: formData.nativePlace,
+        fatherName: formData.fatherName,
+        fatherOccupation: formData.fatherOccupation,
+        motherName: formData.motherName,
+        motherOccupation: formData.motherOccupation,
+        siblings: formData.siblings,
+        familyType: formData.familyType,
+        aboutMe: formData.aboutMe,
+        partnerExpectations: formData.partnerExpectations,
+        // Consents
+        consentEligibility,
+        consentTermsPrivacy,
+        consentProcessing,
+        consentAccuracy,
+        // Compliance IP / Agent
+        clientIp,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Server-side/Unknown',
+        // Uploads
+        horoscopeUrl,
+        horoscopeFileName: horoscopeFile ? horoscopeFile.name : 'horoscope.pdf',
+        horoscopeFileType: horoscopeFile ? horoscopeFile.type : 'application/pdf',
+        profilePhotoUrl
       };
 
-      const { error: profileError } = await profileService.createProfile(profilePayload);
-      if (profileError) {
-        console.error('Error creating public profile row:', profileError);
-        throw new Error(profileError.message || 'Failed to create profile record.');
-      }
+      // 3. Sign up user in Supabase Auth passing all registration details as metadata
+      const { data: signUpData, error: signUpError } = await authService.signUp(
+        formData.email,
+        formData.password,
+        formData.fullName,
+        registrationMetadata
+      );
 
-      // 5. Create partner_preferences Row
-      const preferencesPayload = {
-        user_id: publicUserId,
-        min_age: formData.gender === 'Male' ? 18 : 21,
-        max_age: formData.gender === 'Male' ? 35 : 40,
-        religion: formData.religion || null,
-        caste: formData.caste || null,
-        mother_tongue: formData.motherTongue || null
-      };
+      if (signUpError) {
+        const msg = signUpError.message || '';
+        let friendlyMsg = msg || 'Registration failed. Please try again.';
 
-      const { error: prefError } = await profileService.createPartnerPreferences(preferencesPayload);
-      if (prefError) {
-        console.error('Error creating partner preferences row:', prefError);
-      }
-
-      // 6. Create horoscope_uploads Row (if file URL exists)
-      if (horoscopeUrl) {
-        const horoscopePayload = {
-          user_id: publicUserId,
-          file_url: horoscopeUrl,
-          file_name: horoscopeFile ? horoscopeFile.name : 'horoscope.pdf',
-          file_type: horoscopeFile ? horoscopeFile.type : 'application/pdf'
-        };
-        const { error: horoError } = await profileService.createHoroscopeUpload(horoscopePayload);
-        if (horoError) {
-          console.error('Error creating horoscope upload row:', horoError);
+        if (
+          msg.toLowerCase().includes('already registered') ||
+          msg.toLowerCase().includes('already exists') ||
+          msg.toLowerCase().includes('identity already exists') ||
+          msg.toLowerCase().includes('user already registered')
+        ) {
+          friendlyMsg = 'This email is already registered. Please login instead.';
+        } else if (msg.toLowerCase().includes('email rate limit') || msg.toLowerCase().includes('rate limit')) {
+          friendlyMsg = 'Too many registration attempts. Supabase limits verification emails to a few per hour. Please wait 30–60 minutes and try again, or contact support.';
+        } else if (msg.toLowerCase().includes('invalid email')) {
+          friendlyMsg = 'The email address entered is invalid. Please check and try again.';
+        } else if (msg.toLowerCase().includes('weak password') || msg.toLowerCase().includes('password')) {
+          friendlyMsg = 'Password is too weak. Please use at least 6 characters with a mix of letters and numbers.';
         }
+
+        setErrors(prev => ({ ...prev, termsAccepted: friendlyMsg }));
+        setIsSubmitting(false);
+        return;
       }
 
-      // 7. Create gallery_images Row (if profile photo URL exists)
-      if (profilePhotoUrl) {
-        const galleryPayload = {
-          user_id: publicUserId,
-          image_url: profilePhotoUrl,
-          is_profile_picture: true,
-          is_private: false
-        };
-        const { error: galleryError } = await profileService.createGalleryImage(galleryPayload);
-        if (galleryError) {
-          console.error('Error creating gallery image row:', galleryError);
-        }
+      const authUserId = signUpData?.user?.id;
+
+      // When Supabase email confirmation is enabled, signUp returns user (no error) 
+      // but without session. We let them know they need to verify their email.
+      if (!authUserId || !signUpData?.session) {
+        localStorage.removeItem('gokul_matrimony_register_draft');
+        setIsSubmitting(false);
+        setAwaitingEmailConfirmation(true);
+        return;
       }
 
+      // If email confirmation is disabled, user is immediately logged in
       localStorage.removeItem('gokul_matrimony_register_draft');
       setIsRegistered(true);
       setIsSubmitting(false);
@@ -406,7 +363,42 @@ export default function RegisterStepper() {
 
   return (
     <div className="w-full flex flex-col gap-8">
-      {isRegistered ? (
+      {awaitingEmailConfirmation ? (
+        <div className="p-8 md:p-12 rounded-3xl bg-white dark:bg-zinc-900 border border-sandal-200 dark:border-zinc-800 shadow-2xl text-center flex flex-col items-center gap-6 animate-in zoom-in-95 duration-500">
+          <div className="w-24 h-24 rounded-full bg-blue-100 dark:bg-blue-950/20 flex items-center justify-center text-blue-600 dark:text-blue-400 relative">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-14 w-14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25H4.5a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+            </svg>
+            <div className="absolute inset-0 rounded-full border-4 border-blue-400/30 animate-ping" />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <h2 className="text-3xl font-serif font-black text-zinc-900 dark:text-zinc-50">
+              Check Your Email
+            </h2>
+            <p className="text-xs font-semibold text-gold-650 dark:text-gold-450 uppercase tracking-widest">
+              கோகுல் விவாகம் • Gokul Vivaham
+            </p>
+          </div>
+
+          <p className="text-sm text-zinc-650 dark:text-zinc-400 leading-relaxed font-light max-w-md">
+            A confirmation link has been sent to{' '}
+            <span className="font-semibold text-zinc-800 dark:text-zinc-100">{formData.email}</span>.
+            Please click the link in that email to verify your account and complete registration.
+          </p>
+
+          <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/80 text-xs text-blue-700 dark:text-blue-300">
+            Didn&apos;t receive the email? Check your spam folder or contact support.
+          </div>
+
+          <Link
+            href="/login"
+            className="px-6 py-2.5 rounded-full luxury-gradient text-white text-xs font-semibold uppercase tracking-wider shadow-md hover:scale-105 transition-all duration-200"
+          >
+            Go to Login
+          </Link>
+        </div>
+      ) : isRegistered ? (
         <div className="p-8 md:p-12 rounded-3xl bg-white dark:bg-zinc-900 border border-sandal-200 dark:border-zinc-800 shadow-2xl text-center flex flex-col items-center gap-6 animate-in zoom-in-95 duration-500">
           <div className="w-24 h-24 rounded-full bg-emerald-100 dark:bg-emerald-950/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 relative">
             <CheckCircle2 className="h-16 w-16 animate-bounce" />
@@ -492,7 +484,7 @@ export default function RegisterStepper() {
 
           {/* Form Card */}
           <div className="bg-white dark:bg-zinc-900 p-6 md:p-8 rounded-3xl shadow-xl border border-sandal-200 dark:border-zinc-800/80 transition-all duration-300">
-            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-6" autoComplete="off">
               
               {currentStep === 1 && (
                 <BasicInfoStep
@@ -500,8 +492,6 @@ export default function RegisterStepper() {
                   handleChange={handleChange}
                   errors={errors}
                   setErrors={setErrors}
-                  isOtpVerified={isOtpVerified}
-                  setIsOtpVerified={setIsOtpVerified}
                 />
               )}
 
@@ -614,8 +604,12 @@ export default function RegisterStepper() {
                   <button
                     type="button"
                     onClick={handleNext}
-                    className="flex items-center gap-1.5 px-6 py-2.5 rounded-full luxury-gradient text-white font-semibold text-xs uppercase tracking-widest hover:opacity-90 shadow-md transition-all cursor-pointer"
+                    disabled={isSubmitting}
+                    className="flex items-center gap-1.5 px-6 py-2.5 rounded-full luxury-gradient text-white font-semibold text-xs uppercase tracking-widest hover:opacity-90 shadow-md transition-all cursor-pointer disabled:opacity-50"
                   >
+                    {isSubmitting && currentStep === 1 ? (
+                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1" />
+                    ) : null}
                     Continue <ArrowRight className="h-4 w-4" />
                   </button>
                 ) : (

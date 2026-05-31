@@ -44,6 +44,9 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         document.cookie = `sb-access-token=; path=/; max-age=0; SameSite=Lax${secureFlag}`;
         setRole('user');
+        if (event === 'SIGNED_OUT') {
+          await useAuthStore.getState().logout();
+        }
       }
       setLoading(false);
     });

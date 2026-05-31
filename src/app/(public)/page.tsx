@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { CheckCircle2, Star, MessageCircle } from 'lucide-react';
 import HeroSection from '@/components/home/HeroSection';
 import WhyChooseUs from '@/components/home/WhyChooseUs';
+import FeaturedProfilesCarousel from '@/components/home/FeaturedProfilesCarousel';
 import AstroMatcher from '@/components/home/AstroMatcher';
 import SuccessStories from '@/components/home/SuccessStories';
 import FaqSection from '@/components/home/FaqSection';
@@ -17,6 +18,9 @@ export default function Home() {
 
       {/* CORE VALUE PROPOSITIONS */}
       <WhyChooseUs />
+
+      {/* FEATURED SPOTLIGHT CAROUSEL */}
+      <FeaturedProfilesCarousel />
 
       {/* INTERACTIVE COMPATIBILITY CHECKER */}
       <AstroMatcher />
@@ -63,6 +67,11 @@ export default function Home() {
               
               <Link 
                 href="/register" 
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    localStorage.removeItem('gokul_matrimony_register_draft');
+                  }
+                }}
                 className="mt-8 w-full py-2.5 rounded-full border border-maroon-500/30 text-center text-sm font-semibold text-maroon-700 dark:text-gold-450 hover:bg-maroon-500/5 transition-all"
               >
                 Sign Up Free
@@ -103,6 +112,11 @@ export default function Home() {
               
               <Link 
                 href="/register" 
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    localStorage.removeItem('gokul_matrimony_register_draft');
+                  }
+                }}
                 className="mt-8 w-full py-2.5 rounded-full luxury-gradient text-white text-center text-sm font-semibold hover:opacity-90 shadow-md transition-all"
               >
                 Go Gold Elite
@@ -135,6 +149,11 @@ export default function Home() {
               
               <Link 
                 href="/register" 
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    localStorage.removeItem('gokul_matrimony_register_draft');
+                  }
+                }}
                 className="mt-8 w-full py-2.5 rounded-full border border-maroon-500/30 text-center text-sm font-semibold text-maroon-700 dark:text-gold-450 hover:bg-maroon-500/5 transition-all"
               >
                 Go Diamond Premium
@@ -151,18 +170,6 @@ export default function Home() {
 
       {/* FAQ SECTION */}
       <FaqSection />
-
-      {/* WHATSAPP CTA FLT BUTTON */}
-      <a
-        href="https://wa.me/919876543210?text=Hello!%20I'm%20interested%20in%20knowing%20more%20about%20Gokul%20Vivaham%2520Matrimony."
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 p-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-2xl hover:scale-105 transition-all duration-300"
-        title="WhatsApp Support"
-      >
-        <MessageCircle className="h-6 w-6 fill-white text-emerald-600" />
-        <span className="hidden sm:inline text-xs font-bold pr-2">Live Support</span>
-      </a>
 
     </div>
   );

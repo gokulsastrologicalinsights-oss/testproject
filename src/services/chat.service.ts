@@ -11,8 +11,8 @@ export const chatService = {
     try {
       if (isMockMode()) {
         return { data: [
-          { id: 'chat-1', contact_name: 'Meenakshi N.', age: 24, last_message: 'Hi, I reviewed your horoscope.', updated_at: '2 hours ago' },
-          { id: 'chat-2', contact_name: 'Gayathri S.', age: 25, last_message: 'Hello, are you free for a call tomorrow?', updated_at: '1 day ago' }
+          { id: 'chat-1', contact_name: 'Meenakshi N.', age: 24, last_message: 'Hi, I reviewed your horoscope.', updated_at: '2 hours ago', other_user_id: 'mock-user-1', is_verified: true, is_premium: false, id_verification_status: 'approved', horoscope_verification_status: 'none', email_verified: true, mobile_verified: true },
+          { id: 'chat-2', contact_name: 'Gayathri S.', age: 25, last_message: 'Hello, are you free for a call tomorrow?', updated_at: '1 day ago', other_user_id: 'mock-user-2', is_verified: true, is_premium: true, id_verification_status: 'approved', horoscope_verification_status: 'approved', email_verified: true, mobile_verified: true }
         ], error: null };
       }
 
@@ -30,6 +30,16 @@ export const chatService = {
       if (!userRow) return { data: [], error: new Error('User row not found') };
       const currentUserId = userRow.id;
 
+      // 2.5. Fetch block list for filtering
+      const { data: blocks } = await supabase
+        .from('blocked_users')
+        .select('blocker_user_id, blocked_user_id')
+        .or(`blocker_user_id.eq.${currentUserId},blocked_user_id.eq.${currentUserId}`);
+
+      const blockedUserIds = blocks 
+        ? blocks.map((b: any) => b.blocker_user_id === currentUserId ? b.blocked_user_id : b.blocker_user_id)
+        : [];
+
       // 3. Select all chats where current user is user_one or user_two
       const { data: chatList, error } = await supabase
         .from('chats')
@@ -45,10 +55,10 @@ export const chatService = {
         chatList.map(async (chat) => {
           const otherUserId = chat.user_one === currentUserId ? chat.user_two : chat.user_one;
           
-          // Get profile
+          // Get profile with verification states
           const { data: profile } = await supabase
             .from('profiles')
-            .select('first_name, last_name, age')
+            .select('first_name, last_name, age, is_verified, is_premium, id_verification_status, horoscope_verification_status, users(email_verified, mobile_verified)')
             .eq('user_id', otherUserId)
             .maybeSingle();
 
@@ -68,12 +78,22 @@ export const chatService = {
             age: profile?.age || 25,
             last_message: lastMsg ? lastMsg.message : 'No messages yet',
             updated_at: lastMsg ? new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
-            other_user_id: otherUserId
+            other_user_id: otherUserId,
+            // verification states
+            is_verified: profile?.is_verified || false,
+            is_premium: profile?.is_premium || false,
+            id_verification_status: profile?.id_verification_status || (profile?.is_verified ? 'approved' : 'none'),
+            horoscope_verification_status: profile?.horoscope_verification_status || 'none',
+            email_verified: (profile as any)?.users?.email_verified || false,
+            mobile_verified: (profile as any)?.users?.mobile_verified || false
           };
         })
       );
 
-      return { data: conversations, error: null };
+      // Filter out conversations with blocked users
+      const filteredConversations = conversations.filter(c => !blockedUserIds.includes(c.other_user_id));
+
+      return { data: filteredConversations, error: null };
     } catch (err: any) {
       return { data: [], error: err };
     }
@@ -146,6 +166,26 @@ export const chatService = {
         .maybeSingle();
 
       const currentUserId = userRow?.id || user.id;
+
+      // 2. Check blocks before sending
+      const { data: chatRow } = await supabase
+        .from('chats')
+        .select('user_one, user_two')
+        .eq('id', channelId)
+        .maybeSingle();
+
+      if (chatRow) {
+        const opponentId = chatRow.user_one === currentUserId ? chatRow.user_two : chatRow.user_one;
+        const { data: block } = await supabase
+          .from('blocked_users')
+          .select('id')
+          .or(`and(blocker_user_id.eq.${currentUserId},blocked_user_id.eq.${opponentId}),and(blocker_user_id.eq.${opponentId},blocked_user_id.eq.${currentUserId})`)
+          .maybeSingle();
+
+        if (block) {
+          throw new Error('Cannot send messages to a blocked member.');
+        }
+      }
 
       const { data, error } = await supabase
         .from('chat_messages')

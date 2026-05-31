@@ -4,6 +4,15 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import { WhatsAppFloatingButton } from "@/components/contact/WhatsAppFloatingButton";
+import { contactConfig } from "@/config/contact.config";
+
+// Context & State Providers
+import QueryProvider from "@/providers/QueryProvider";
+import AuthProvider from "@/providers/AuthProvider";
+import ThemeProvider from "@/providers/ThemeProvider";
+import LanguageProvider from "@/providers/LanguageProvider";
+import NotificationProvider from "@/providers/NotificationProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,18 +34,60 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    "name": "Gokul Vivaham",
+    "alternateName": contactConfig.brand.name,
+    "description": contactConfig.brand.tagline,
+    "telephone": contactConfig.phone.display,
+    "email": contactConfig.email.support,
+    "url": "https://gokulvivaham.com",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": contactConfig.address.streetAddress,
+      "addressLocality": contactConfig.address.addressLocality,
+      "addressRegion": contactConfig.address.addressRegion,
+      "postalCode": contactConfig.address.postalCode,
+      "addressCountry": contactConfig.address.addressCountry,
+    },
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": contactConfig.address.geo.latitude,
+      "longitude": contactConfig.address.geo.longitude
+    }
+  };
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
       <body className="min-h-full flex flex-col bg-sandal-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
-        <Navbar />
-        <main className="flex-1 flex flex-col w-full pb-16 lg:pb-0">{children}</main>
-        <Footer />
-        <MobileBottomNav />
+        <QueryProvider>
+          <AuthProvider>
+            <ThemeProvider>
+              <LanguageProvider>
+                <NotificationProvider>
+                  <Navbar />
+                  <main className="flex-1 flex flex-col w-full pb-16 lg:pb-0">{children}</main>
+                  <Footer />
+                  <MobileBottomNav />
+                  <WhatsAppFloatingButton />
+                </NotificationProvider>
+              </LanguageProvider>
+            </ThemeProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );
 }
+
 

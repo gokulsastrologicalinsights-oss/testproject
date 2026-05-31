@@ -22,7 +22,7 @@ export default function PersonalDetailsStep({
           name="maritalStatus"
           value={formData.maritalStatus}
           onChange={handleChange}
-          className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-150"
+          className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-white"
         >
           <option value="">Select Status</option>
           <option value="Never Married">Never Married</option>
@@ -51,7 +51,7 @@ export default function PersonalDetailsStep({
           name="religion"
           value={formData.religion}
           onChange={handleChange}
-          className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-150"
+          className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-white"
         >
           <option value="Hindu">Hindu</option>
           <option value="Christian">Christian</option>
@@ -101,7 +101,7 @@ export default function PersonalDetailsStep({
           name="rasi"
           value={formData.rasi}
           onChange={handleChange}
-          className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-150"
+          className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-white"
         >
           <option value="">Select Rasi</option>
           <option value="Mesham">Mesham (Aries)</option>
@@ -160,7 +160,7 @@ export default function PersonalDetailsStep({
           name="physicalStatus"
           value={formData.physicalStatus}
           onChange={handleChange}
-          className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-150"
+          className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-white"
         >
           <option value="Normal">Normal</option>
           <option value="Physically Challenged">Physically Challenged</option>

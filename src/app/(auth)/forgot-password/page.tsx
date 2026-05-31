@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Mail, ArrowLeft, CheckCircle2, Heart } from 'lucide-react';
+import { SupportSection } from '@/components/contact/SupportSection';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -29,7 +30,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="flex-grow flex items-center justify-center p-6 bg-sandal-50/20 dark:bg-zinc-950/20 min-h-[calc(100vh-80px)]">
+    <div className="flex-grow flex flex-col gap-6 items-center justify-center p-6 bg-sandal-50/20 dark:bg-zinc-950/20 min-h-[calc(100vh-80px)] animate-in fade-in duration-300">
       <div className="w-full max-w-md bg-white dark:bg-zinc-900 p-8 rounded-3xl shadow-xl border border-sandal-200 dark:border-zinc-800/80">
         
         <div className="flex flex-col items-center text-center gap-2 mb-6">
@@ -100,6 +101,9 @@ export default function ForgotPassword() {
           </form>
         )}
 
+      </div>
+      <div className="w-full max-w-md">
+        <SupportSection compact />
       </div>
     </div>
   );

@@ -91,7 +91,7 @@ export default function FamilyDetailsStep({
           name="familyType"
           value={formData.familyType}
           onChange={handleChange}
-          className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-150"
+          className="h-11 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-white"
         >
           <option value="Nuclear">Nuclear Family</option>
           <option value="Joint">Joint Family</option>

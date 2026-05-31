@@ -5,19 +5,24 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   Check, X, Ban, Flag, ShieldAlert, Trash2, 
-  User, Image, FileText, LogOut, Bell, ShieldCheck, CheckCircle2
+  User, Image, FileText, LogOut, Bell, ShieldCheck, CheckCircle2, ExternalLink
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/authStore';
+import { verificationService } from '@/services/verification.service';
+import { uploadService } from '@/services/upload.service';
+import { safetyService } from '@/services/safety.service';
 
 export default function AdminApprovalsPage() {
   const router = useRouter();
 
   // Navigation states
-  const [activeTab, setActiveTab] = useState<'profiles' | 'reports' | 'photos' | 'deletion'>('profiles');
+  const [activeTab, setActiveTab] = useState<'profiles' | 'verifications' | 'reports' | 'photos' | 'deletion'>('verifications');
   const [loading, setLoading] = useState(true);
 
   // Data states
   const [profilesQueue, setProfilesQueue] = useState<any[]>([]);
+  const [verificationsQueue, setVerificationsQueue] = useState<any[]>([]);
   const [reportsQueue, setReportsQueue] = useState<any[]>([]);
   const [photosQueue, setPhotosQueue] = useState<any[]>([]);
   const [deletionQueue, setDeletionQueue] = useState<any[]>([]);
@@ -37,39 +42,15 @@ export default function AdminApprovalsPage() {
       // Filter for profiles that need verification/approval
       setProfilesQueue((profiles || []).filter((p: any) => !p.is_verified));
 
-      // 2. Fetch abuse reports
-      const { data: reports } = await supabase
-        .from('reports')
-        .select('*');
-      
-      const enrichedReports = [];
-      if (reports) {
-        for (const report of reports) {
-          const { data: reporter } = await supabase
-            .from('profiles')
-            .select('first_name, last_name, profile_id')
-            .eq('user_id', report.reporter_user_id)
-            .maybeSingle();
+      // 2. Fetch pending document verifications
+      const { data: verifs } = await verificationService.adminGetPendingRequests();
+      setVerificationsQueue(verifs || []);
 
-          const { data: reported } = await supabase
-            .from('profiles')
-            .select('first_name, last_name, profile_id, is_suspended')
-            .eq('user_id', report.reported_user_id)
-            .maybeSingle();
+      // 3. Fetch abuse reports
+      const { data: reports } = await safetyService.adminGetAbuseReports();
+      setReportsQueue(reports || []);
 
-          enrichedReports.push({
-            ...report,
-            reporterName: reporter ? `${reporter.first_name} ${reporter.last_name}` : 'Unknown Reporter',
-            reporterId: reporter?.profile_id || 'GV-UNKNOWN',
-            reportedName: reported ? `${reported.first_name} ${reported.last_name}` : 'Unknown Suspect',
-            reportedId: reported?.profile_id || 'GV-UNKNOWN',
-            isSuspended: reported?.is_suspended || false
-          });
-        }
-      }
-      setReportsQueue(enrichedReports);
-
-      // 3. Fetch pending photos
+      // 4. Fetch pending photos
       const { data: photos } = await supabase
         .from('gallery_images')
         .select('*');
@@ -93,7 +74,7 @@ export default function AdminApprovalsPage() {
       // Filter out images that are already processed or display all pending
       setPhotosQueue(enrichedPhotos.filter((ph: any) => ph.moderation_status === 'pending' || !ph.moderation_status));
 
-      // 4. Fetch deletion requests
+      // 5. Fetch deletion requests
       const { data: deletions } = await supabase
         .from('deletion_requests')
         .select('*');
@@ -116,7 +97,7 @@ export default function AdminApprovalsPage() {
       }
       setDeletionQueue(enrichedDeletions.filter((d: any) => d.status === 'pending'));
 
-      // 5. Fetch audit logs (from activity_logs table where action matches MODERATOR)
+      // 6. Fetch audit logs (from activity_logs table where action matches MODERATOR)
       const { data: logs } = await supabase
         .from('activity_logs')
         .select('*')
@@ -180,6 +161,47 @@ export default function AdminApprovalsPage() {
     }
   };
 
+  const handleProcessVerification = async (req: any, status: 'approved' | 'rejected' | 'resubmit_requested') => {
+    let reason = '';
+    if (status === 'rejected' || status === 'resubmit_requested') {
+      const promptMsg = status === 'rejected' ? 'Enter rejection reason:' : 'Enter resubmission instructions for user:';
+      const val = prompt(promptMsg);
+      if (val === null) return;
+      if (!val.trim()) {
+        alert('Reason is required.');
+        return;
+      }
+      reason = val.trim();
+    }
+
+    try {
+      const { success, error } = await verificationService.adminProcessRequest(
+        req.id,
+        req.user_id,
+        req.verification_type,
+        status,
+        reason
+      );
+
+      if (error) throw error;
+      alert(`Verification request status updated to ${status}.`);
+      fetchModerationData();
+    } catch (e: any) {
+      alert('Error processing request: ' + e.message);
+    }
+  };
+
+  const handleViewDocument = async (req: any) => {
+    const bucket = req.verification_type === 'id_proof' ? 'id-proofs' : 'horoscopes';
+    try {
+      const { url, error } = await uploadService.getSignedUrl(bucket, req.document_url);
+      if (error || !url) throw error || new Error('Could not generate signed URL');
+      window.open(url, '_blank');
+    } catch (e: any) {
+      alert('Error opening document: ' + e.message);
+    }
+  };
+
   const handleApprovePhoto = async (photo: any) => {
     try {
       const { error } = await supabase
@@ -225,50 +247,31 @@ export default function AdminApprovalsPage() {
     }
   };
 
-  const handleSuspendUser = async (userId: string, name: string) => {
-    const confirmSuspend = confirm(`Are you sure you want to suspend/ban user ${name}? They will be blocked from accessing the site.`);
-    if (!confirmSuspend) return;
-
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_suspended: true, suspended_at: new Date().toISOString() })
-        .eq('user_id', userId);
-
-      if (error) throw error;
-
-      // Log action
-      await supabase.from('activity_logs').insert({
-        action: 'MODERATOR_SUSPEND_USER',
-        metadata: { target_user_id: userId, name }
-      });
-
-      alert(`Suspended User: ${name}`);
-      fetchModerationData();
-    } catch (e: any) {
-      alert('Error suspending user: ' + e.message);
+  const handleProcessSafetyAction = async (report: any, action: 'warn' | 'suspend' | 'ban' | 'dismiss') => {
+    let notes = '';
+    if (action !== 'dismiss') {
+      const promptNotes = `Enter moderator notes / reason for safety action: ${action.toUpperCase()}`;
+      const val = prompt(promptNotes);
+      if (val === null) return;
+      notes = val.trim();
+    } else {
+      const confirmDismiss = confirm('Are you sure you want to dismiss this abuse report?');
+      if (!confirmDismiss) return;
     }
-  };
 
-  const handleDismissReport = async (reportId: string) => {
     try {
-      const { error } = await supabase
-        .from('reports')
-        .delete()
-        .eq('id', reportId);
+      const { success, error } = await safetyService.adminProcessReportAction(
+        report.id,
+        report.reported_user_id,
+        action,
+        notes
+      );
 
       if (error) throw error;
-
-      // Log action
-      await supabase.from('activity_logs').insert({
-        action: 'MODERATOR_DISMISS_REPORT',
-        metadata: { report_id: reportId }
-      });
-
-      alert('Report dismissed.');
+      alert(`Safety action ${action.toUpperCase()} completed successfully.`);
       fetchModerationData();
     } catch (e: any) {
-      alert('Error dismissing report: ' + e.message);
+      alert('Error applying action: ' + e.message);
     }
   };
 
@@ -312,8 +315,7 @@ export default function AdminApprovalsPage() {
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push('/admin/login');
+    await useAuthStore.getState().logout();
   };
 
   return (
@@ -352,7 +354,17 @@ export default function AdminApprovalsPage() {
       <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col gap-6">
         
         {/* Navigation Tabs */}
-        <div className="flex border-b border-zinc-850 text-xs uppercase tracking-widest font-mono">
+        <div className="flex border-b border-zinc-850 text-xs uppercase tracking-widest font-mono flex-wrap">
+          <button
+            onClick={() => setActiveTab('verifications')}
+            className={`px-5 py-3 border-b-2 font-bold cursor-pointer transition-colors ${
+              activeTab === 'verifications' 
+                ? 'border-gold-500 text-gold-500 bg-zinc-900/30' 
+                : 'border-transparent text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            Doc Verifications ({verificationsQueue.length})
+          </button>
           <button
             onClick={() => setActiveTab('profiles')}
             className={`px-5 py-3 border-b-2 font-bold cursor-pointer transition-colors ${
@@ -404,6 +416,67 @@ export default function AdminApprovalsPage() {
             
             {/* TABS CONTAINER CONTENT */}
             
+            {/* 0. DOCUMENT VERIFICATIONS */}
+            {activeTab === 'verifications' && (
+              <div className="flex flex-col gap-4">
+                {verificationsQueue.length > 0 ? (
+                  verificationsQueue.map((req) => (
+                    <div key={req.id} className="bg-zinc-900 border border-zinc-850 p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 text-left shadow-md">
+                      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-white font-serif">{req.first_name} {req.last_name}</span>
+                          <span className="text-[10px] text-gold-500 font-mono">ID: {req.profile_id}</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
+                            req.verification_type === 'id_proof' ? 'bg-blue-950 text-blue-400 border border-blue-900/30' : 'bg-amber-955 text-amber-400 border border-amber-900/30'
+                          }`}>
+                            {req.verification_type === 'id_proof' ? 'ID Proof' : 'Horoscope'}
+                          </span>
+                          <span className="text-[10px] text-zinc-400">({req.document_type})</span>
+                        </div>
+                        <p className="text-xs text-zinc-400 leading-normal font-light">
+                          Email: {req.email} • Submitted: {new Date(req.created_at).toLocaleString()}
+                        </p>
+                        
+                        <div className="mt-2.5 flex items-center gap-2">
+                          <button
+                            onClick={() => handleViewDocument(req)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 hover:bg-zinc-850 text-zinc-300 text-[10px] font-semibold tracking-wide uppercase transition-colors cursor-pointer select-none"
+                          >
+                            <FileText className="h-3.5 w-3.5" /> View Submitted Document <ExternalLink className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+                        <button
+                          onClick={() => handleProcessVerification(req, 'resubmit_requested')}
+                          className="px-3 h-8.5 rounded-lg border border-orange-900/30 bg-orange-950/20 text-orange-400 hover:bg-orange-950/40 text-xs font-semibold uppercase tracking-wider cursor-pointer"
+                        >
+                          Resubmit
+                        </button>
+                        <button
+                          onClick={() => handleProcessVerification(req, 'rejected')}
+                          className="px-3 h-8.5 rounded-lg border border-red-900/30 bg-red-950/20 text-red-400 hover:bg-red-950/40 text-xs font-semibold uppercase tracking-wider cursor-pointer"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          onClick={() => handleProcessVerification(req, 'approved')}
+                          className="flex items-center gap-1 px-4 h-8.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-zinc-950 font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer text-white"
+                        >
+                          <Check className="h-4 w-4" /> Approve
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-12 text-center text-zinc-500 font-mono text-xs border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/20">
+                    No pending document verifications found.
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 1. PROFILE APPROVALS */}
             {activeTab === 'profiles' && (
               <div className="flex flex-col gap-4">
@@ -454,43 +527,68 @@ export default function AdminApprovalsPage() {
                 {reportsQueue.length > 0 ? (
                   reportsQueue.map((report) => (
                     <div key={report.id} className="bg-zinc-900 border border-zinc-850 p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 text-left shadow-md">
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-zinc-400">Reporter:</span>
-                          <span className="text-xs font-semibold text-zinc-200">{report.reporterName} ({report.reporterId})</span>
-                          <span className="text-zinc-600">➔</span>
-                          <span className="text-xs font-bold text-red-400">Accused:</span>
-                          <span className="text-xs font-semibold text-white">{report.reportedName} ({report.reportedId})</span>
-                          {report.isSuspended && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-800/20 font-bold uppercase tracking-wider">SUSPENDED</span>
-                          )}
+                      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap text-xs">
+                          <span className="font-bold text-zinc-550">Reporter:</span>
+                          <span className="font-semibold text-zinc-200">{report.reporter_name || report.reporterName} ({report.reporter_profile_id || report.reporterId})</span>
+                          <span className="text-zinc-650">➔</span>
+                          <span className="font-bold text-red-400">Accused:</span>
+                          <span className="font-semibold text-white">{report.reported_name || report.reportedName} ({report.reported_profile_id || report.reportedId})</span>
+                          
+                          <span className="px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-zinc-800 text-zinc-400">
+                            {report.report_type === 'message' ? 'Message Flag' : 'Profile Flag'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-red-950/40 text-red-400 border border-red-900/10">
+                            {report.category}
+                          </span>
                         </div>
-                        <p className="text-xs text-zinc-400 leading-normal font-light mt-1">
-                          <span className="font-semibold text-zinc-300">Complaint Reason:</span> {report.reason}
+
+                        <p className="text-xs text-zinc-400 leading-normal font-light mt-1.5">
+                          <span className="font-semibold text-zinc-350">Reason:</span> {report.reason}
                         </p>
+
+                        {/* Display flagged message if message report */}
+                        {report.report_type === 'message' && report.reported_message_text && (
+                          <div className="p-3 bg-zinc-950 border border-zinc-850 rounded-xl mt-2 max-w-xl">
+                            <span className="text-[9px] font-bold text-zinc-550 uppercase tracking-wider font-mono">Flagged Chat Message:</span>
+                            <blockquote className="text-xs text-zinc-305 italic mt-1 font-serif">
+                              "{report.reported_message_text}"
+                            </blockquote>
+                          </div>
+                        )}
                       </div>
                       
-                      <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+                      <div className="flex items-center gap-2 self-start md:self-center shrink-0 flex-wrap max-w-xs md:max-w-none">
                         <button
-                          onClick={() => handleDismissReport(report.id)}
+                          onClick={() => handleProcessSafetyAction(report, 'dismiss')}
                           className="px-3 h-8.5 rounded-lg border border-zinc-800 text-zinc-400 hover:bg-zinc-850 text-xs font-semibold uppercase tracking-wider cursor-pointer"
                         >
                           Dismiss
                         </button>
-                        {!report.isSuspended && (
-                          <button
-                            onClick={() => handleSuspendUser(report.reported_user_id, report.reportedName)}
-                            className="flex items-center gap-1.5 px-4 h-8.5 rounded-lg bg-red-950/80 border border-red-800 text-red-400 hover:bg-red-900 transition-colors font-bold text-xs uppercase tracking-wider cursor-pointer"
-                          >
-                            <Ban className="h-4 w-4" /> Suspend Member
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleProcessSafetyAction(report, 'warn')}
+                          className="px-3 h-8.5 rounded-lg border border-amber-900/30 bg-amber-950/20 text-amber-500 hover:bg-amber-950/40 text-xs font-semibold uppercase tracking-wider cursor-pointer"
+                        >
+                          Warn
+                        </button>
+                        <button
+                          onClick={() => handleProcessSafetyAction(report, 'suspend')}
+                          className="px-3 h-8.5 rounded-lg border border-orange-900/30 bg-orange-950/20 text-orange-400 hover:bg-orange-950/40 text-xs font-semibold uppercase tracking-wider cursor-pointer"
+                        >
+                          Suspend
+                        </button>
+                        <button
+                          onClick={() => handleProcessSafetyAction(report, 'ban')}
+                          className="px-4 h-8.5 rounded-lg bg-red-650 hover:bg-red-750 text-white font-bold text-xs uppercase tracking-wider cursor-pointer shadow-md"
+                        >
+                          Ban
+                        </button>
                       </div>
                     </div>
                   ))
                 ) : (
                   <div className="p-12 text-center text-zinc-500 font-mono text-xs border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/20">
-                    No pending profile abuse reports.
+                    No pending abuse reports found.
                   </div>
                 )}
               </div>

@@ -9,16 +9,14 @@ const isMockMode = () => {
 export const subscriptionService = {
   async getBillingLogs() {
     try {
-      if (isMockMode()) {
-        return { data: [], error: null };
-      }
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
         .from('subscriptions')
-        .select('*')
-        .eq('user_id', user.id);
+        .select('*, plan:subscription_plans(*)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
       return { data: data || [], error };
     } catch (err: any) {
       return { data: [], error: err };
@@ -27,15 +25,12 @@ export const subscriptionService = {
 
   async getActiveSubscription() {
     try {
-      if (isMockMode()) {
-        return { data: null, error: null };
-      }
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
         .from('subscriptions')
-        .select('*')
+        .select('*, plan:subscription_plans(*)')
         .eq('user_id', user.id)
         .eq('payment_status', 'Completed')
         .gt('end_date', new Date().toISOString())
@@ -46,6 +41,54 @@ export const subscriptionService = {
       return { data, error };
     } catch (err: any) {
       return { data: null, error: err };
+    }
+  },
+
+  async getTransactions() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*, payment:payments(*)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      return { data: data || [], error };
+    } catch (err: any) {
+      return { data: [], error: err };
+    }
+  },
+
+  async cancelSubscription() {
+    try {
+      const res = await fetch('/api/payments/cancel-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to cancel subscription');
+      }
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: err.message || err };
+    }
+  },
+
+  async runCleanup() {
+    try {
+      const res = await fetch('/api/payments/subscription-cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to run cleanup');
+      }
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: err.message || err };
     }
   }
 };

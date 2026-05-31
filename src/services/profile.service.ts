@@ -14,7 +14,7 @@ export const profileService = {
     }
   },
 
-  async createUser(userData: { id: string; auth_user_id: string; email: string; mobile_number: string }) {
+  async createUser(userData: { id: string; auth_user_id: string; email: string; mobile_number?: string }) {
     try {
       const { data, error } = await supabase
         .from('users')
@@ -22,7 +22,6 @@ export const profileService = {
           id: userData.id,
           auth_user_id: userData.auth_user_id,
           email: userData.email,
-          mobile_number: userData.mobile_number,
           role: 'user',
           status: 'active'
         })

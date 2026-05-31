@@ -148,7 +148,38 @@ export const matchService = {
         ], error: null };
       }
 
-      let query = supabase.from('profiles').select('*');
+      let currentUserId: string | null = null;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: userRow } = await supabase
+            .from('users')
+            .select('id')
+            .eq('auth_user_id', user.id)
+            .maybeSingle();
+          currentUserId = userRow?.id || user.id;
+        }
+      } catch (err) {
+        console.error('Error getting user in getMatches:', err);
+      }
+
+      // 0. Fetch blocklist to exclude blocked candidates
+      let blockedUserIds: string[] = [];
+      if (currentUserId) {
+        const { data: blocks } = await supabase
+          .from('blocked_users')
+          .select('blocker_user_id, blocked_user_id')
+          .or(`blocker_user_id.eq.${currentUserId},blocked_user_id.eq.${currentUserId}`);
+        
+        if (blocks) {
+          blockedUserIds = blocks.map((b: any) => b.blocker_user_id === currentUserId ? b.blocked_user_id : b.blocker_user_id);
+        }
+      }
+
+      let query = supabase.from('profiles').select('*, users(email_verified, mobile_verified)');
+      if (currentUserId) {
+        query = query.neq('user_id', currentUserId);
+      }
 
       if (filters) {
         if (filters.gender) query = query.eq('gender', filters.gender);
@@ -164,7 +195,7 @@ export const matchService = {
       const { data, error } = await query;
       
       // format profiles data to standard view structure
-      const formatted = data?.map(profile => ({
+      const formatted = (data as any)?.map((profile: any) => ({
         id: profile.profile_id || profile.id,
         name: `${profile.first_name} ${profile.last_name}`,
         gender: profile.gender,
@@ -188,10 +219,14 @@ export const matchService = {
         is_premium: profile.is_premium,
         marital_status: profile.marital_status,
         score: 85, // Default compatibility score
-        user_id: profile.user_id
+        user_id: profile.user_id,
+        email_verified: profile.users?.email_verified || false,
+        mobile_verified: profile.users?.mobile_verified || false,
+        id_verification_status: profile.id_verification_status || (profile.is_verified ? 'approved' : 'none'),
+        horoscope_verification_status: profile.horoscope_verification_status || 'none'
       }));
 
-      return { data: formatted || [], error };
+      return { data: formatted ? formatted.filter((p: any) => !blockedUserIds.includes(p.user_id)) : [], error };
     } catch (err: any) {
       return { data: [], error: err };
     }
@@ -205,10 +240,29 @@ export const matchService = {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+
+      const currentUserId = userRow?.id || user.id;
+
+      // Check blocks
+      const { data: block } = await supabase
+        .from('blocked_users')
+        .select('id')
+        .or(`and(blocker_user_id.eq.${currentUserId},blocked_user_id.eq.${receiverUserId}),and(blocker_user_id.eq.${receiverUserId},blocked_user_id.eq.${currentUserId})`)
+        .maybeSingle();
+
+      if (block) {
+        throw new Error('Cannot send connection request to a blocked member.');
+      }
+
       const { data, error } = await supabase
         .from('match_requests')
         .insert({
-          sender_user_id: user.id,
+          sender_user_id: currentUserId,
           receiver_user_id: receiverUserId,
           status: 'pending'
         })
@@ -230,10 +284,18 @@ export const matchService = {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+
+      const currentUserId = userRow?.id || user.id;
+
       const { data: requests, error: reqError } = await supabase
         .from('match_requests')
         .select('*')
-        .eq('receiver_user_id', user.id)
+        .eq('receiver_user_id', currentUserId)
         .eq('status', 'pending');
       
       if (reqError || !requests || requests.length === 0) {

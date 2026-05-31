@@ -1,6 +1,7 @@
 'use client';
 
 import { Users, AlertCircle, HeartHandshake, CheckCircle } from 'lucide-react';
+import { contactConfig } from '@/config/contact.config';
 
 export default function CommunityGuidelines() {
   return (
@@ -45,7 +46,7 @@ export default function CommunityGuidelines() {
           <Users className="h-5 w-5" /> 4. Reporting Misbehavior
         </div>
         <p>
-          If you encounter any profile violating these guidelines, please click the **Report Profile** button or email <span className="font-semibold text-maroon-600 dark:text-gold-450">abuse@gokulvivaham.com</span> immediately. All reports are investigated within 24 hours.
+          If you encounter any profile violating these guidelines, please click the **Report Profile** button or email <a href={contactConfig.email.link} className="font-semibold text-maroon-600 dark:text-gold-450 hover:underline">{contactConfig.email.support}</a> immediately. All reports are investigated within 24 hours.
         </p>
       </div>
 

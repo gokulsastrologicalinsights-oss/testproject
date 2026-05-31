@@ -2,76 +2,144 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Heart, Compass, Check, X, Phone } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { 
+  Heart, Compass, Check, X, Phone, Mail, 
+  Lock, Unlock, MessageSquare, Copy, CheckCircle2, Loader2 
+} from 'lucide-react';
+import { useInterests } from '@/hooks/useInterests';
+import { matchService } from '@/services/match.service';
+
+interface ContactInfo {
+  email: string;
+  phone: string;
+  error?: string;
+}
 
 export default function Interests() {
-  const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
+  const queryClient = useQueryClient();
+  const { data: interests, isLoading, error } = useInterests();
+  const [activeTab, setActiveTab] = useState<'pending' | 'accepted'>('pending');
 
-  // Received Interests
-  const [receivedInterests, setReceivedInterests] = useState([
-    {
-      id: 'GVV-120',
-      name: 'Pranesh Kumar M.',
-      age: 29,
-      location: 'Coimbatore',
-      education: 'Doctor (MD)',
-      star: 'Uthiradam',
-      score: 85,
-      date: 'Received: Yesterday',
-      status: 'pending'
-    },
-    {
-      id: 'GVV-054',
-      name: 'Srinivasan R.',
-      age: 28,
-      location: 'Chennai',
-      education: 'B.Tech Tech Lead',
-      star: 'Pooram',
-      score: 91,
-      date: 'Received: May 20, 2026',
-      status: 'accepted'
+  // Mutation and request tracking states
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [unlockedContacts, setUnlockedContacts] = useState<Record<string, ContactInfo>>({});
+  const [unlockingId, setUnlockingId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Group and partition the query results
+  const data = interests || [];
+  const pendingRequests = data.filter((item: any) => item.status === 'pending');
+  const acceptedConnections = data.filter((item: any) => item.status === 'accepted');
+
+  // Handle Accept or Decline mutations
+  const handleRespond = async (requestId: string, status: 'accepted' | 'declined') => {
+    setActionInProgress(requestId);
+    try {
+      const { error } = await matchService.respondToRequest(requestId, status);
+      if (error) {
+        alert(`Failed to update request: ${error.message}`);
+      } else {
+        await queryClient.invalidateQueries({ queryKey: ['matchRequests'] });
+      }
+    } catch (err: any) {
+      alert(`An error occurred: ${err.message}`);
+    } finally {
+      setActionInProgress(null);
     }
-  ]);
-
-  // Sent Interests
-  const [sentInterests, setSentInterests] = useState([
-    {
-      id: 'GVV-089',
-      name: 'Gokulakrishnan M.',
-      age: 28,
-      location: 'Bangalore',
-      education: 'MBA Project Manager',
-      star: 'Pooradam',
-      score: 95,
-      date: 'Sent: May 23, 2026',
-      status: 'pending'
-    },
-    {
-      id: 'GVV-045',
-      name: 'Venkatesh Prasad S.',
-      age: 30,
-      location: 'Chennai',
-      education: 'MS Cloud Architect',
-      star: 'Aswini',
-      score: 88,
-      date: 'Sent: May 22, 2026',
-      status: 'declined'
-    }
-  ]);
-
-  const handleAccept = (id: string, name: string) => {
-    setReceivedInterests(prev => 
-      prev.map(i => i.id === id ? { ...i, status: 'accepted' } : i)
-    );
-    alert(`Accepted match interest from ${name}! Phone contact is now unlocked.`);
   };
 
-  const handleDecline = (id: string, name: string) => {
-    setReceivedInterests(prev => 
-      prev.map(i => i.id === id ? { ...i, status: 'declined' } : i)
-    );
-    alert(`Declined match interest from ${name}.`);
+  // Securely unlock contact details using API Route
+  const handleViewContacts = async (profileId: string) => {
+    setUnlockingId(profileId);
+    try {
+      const response = await fetch('/api/profile/contact-details', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ profileId }),
+      });
+
+      const resData = await response.json();
+      
+      if (!response.ok) {
+        if (response.status === 403) {
+          // Premium block
+          setUnlockedContacts(prev => ({
+            ...prev,
+            [profileId]: { email: '', phone: '', error: 'premium_required' }
+          }));
+        } else {
+          alert(resData.error || 'Failed to unlock contact details');
+        }
+      } else {
+        setUnlockedContacts(prev => ({
+          ...prev,
+          [profileId]: { email: resData.email, phone: resData.phone }
+        }));
+      }
+    } catch (err: any) {
+      alert(`Network error: ${err.message}`);
+    } finally {
+      setUnlockingId(null);
+    }
   };
+
+  // Copy-to-clipboard handler
+  const handleCopyText = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Loading skeleton screen
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-6 text-left animate-pulse">
+        <div className="flex flex-col gap-2">
+          <div className="h-8 w-60 bg-zinc-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
+          <div className="h-4 w-80 bg-zinc-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
+        </div>
+        <div className="h-10 w-80 bg-zinc-200 dark:bg-zinc-850 rounded-xl animate-pulse" />
+        <div className="flex flex-col gap-4 mt-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="p-5 bg-white dark:bg-zinc-900 rounded-3xl border border-sandal-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex gap-4 items-center">
+                <div className="w-14 h-14 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                <div className="flex flex-col gap-2">
+                  <div className="h-4.5 w-32 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                  <div className="h-3 w-64 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                </div>
+              </div>
+              <div className="h-8 w-24 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Error page fallback
+  if (error) {
+    return (
+      <div className="p-8 text-center bg-red-500/10 border border-red-500/20 text-red-800 dark:text-red-400 rounded-3xl text-left max-w-xl mx-auto flex flex-col items-center gap-4">
+        <div className="p-3 bg-red-500/20 text-red-650 rounded-full shrink-0">
+          <X className="h-6 w-6" />
+        </div>
+        <div className="text-center">
+          <p className="font-serif font-bold text-base text-zinc-900 dark:text-zinc-50">Failed to load match requests</p>
+          <p className="text-xs mt-1 text-zinc-500 font-light leading-relaxed">{(error as Error).message}</p>
+        </div>
+        <button 
+          onClick={() => queryClient.invalidateQueries({ queryKey: ['matchRequests'] })}
+          className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider transition-all"
+        >
+          Retry Load
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6 text-left">
@@ -79,152 +147,303 @@ export default function Interests() {
       {/* Header */}
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl md:text-3xl font-serif font-bold text-zinc-900 dark:text-zinc-50">
-          Match Interests
+          Match Interests &amp; Connections
         </h1>
         <p className="text-xs text-zinc-500 dark:text-zinc-400 font-light">
-          Track interest invitations you have sent to or received from other members.
+          Manage invitations you have received or sent, and view details of accepted matches.
         </p>
       </div>
 
       {/* Tab controls */}
-      <div className="flex bg-sandal-100 dark:bg-zinc-800 p-1 rounded-xl max-w-sm">
+      <div className="flex bg-sandal-100 dark:bg-zinc-800 p-1 rounded-xl max-w-md w-full">
         <button
-          onClick={() => setActiveTab('received')}
-          className={`flex-1 py-2.5 text-xs font-semibold rounded-lg tracking-wider uppercase transition-all cursor-pointer ${
-            activeTab === 'received'
+          onClick={() => setActiveTab('pending')}
+          className={`flex-1 py-2.5 text-xs font-bold rounded-lg tracking-wider uppercase transition-all cursor-pointer ${
+            activeTab === 'pending'
               ? 'bg-white dark:bg-zinc-700 text-maroon-700 dark:text-gold-400 shadow'
               : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
           }`}
         >
-          Received ({receivedInterests.length})
+          Pending ({pendingRequests.length})
         </button>
         <button
-          onClick={() => setActiveTab('sent')}
-          className={`flex-1 py-2.5 text-xs font-semibold rounded-lg tracking-wider uppercase transition-all cursor-pointer ${
-            activeTab === 'sent'
+          onClick={() => setActiveTab('accepted')}
+          className={`flex-1 py-2.5 text-xs font-bold rounded-lg tracking-wider uppercase transition-all cursor-pointer ${
+            activeTab === 'accepted'
               ? 'bg-white dark:bg-zinc-700 text-maroon-700 dark:text-gold-400 shadow'
               : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
           }`}
         >
-          Sent ({sentInterests.length})
+          Accepted ({acceptedConnections.length})
         </button>
       </div>
 
-      {/* Interests list */}
+      {/* Lists display */}
       <div className="flex flex-col gap-4">
-        {activeTab === 'received' ? (
-          receivedInterests.length > 0 ? (
-            receivedInterests.map((item) => (
-              <div
-                key={item.id}
-                className="p-5 bg-white dark:bg-zinc-900 rounded-3xl shadow-md border border-sandal-200 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        {activeTab === 'pending' ? (
+          /* Render Pending Requests */
+          pendingRequests.length === 0 ? (
+            <div className="p-12 text-center text-zinc-550 dark:text-zinc-400 font-mono text-xs border border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl bg-white dark:bg-zinc-900 flex flex-col items-center gap-3">
+              <Heart className="h-8 w-8 text-zinc-300 dark:text-zinc-700 animate-pulse" />
+              <span>No pending requests. Explore profiles to initiate connection requests!</span>
+              <Link
+                href="/dashboard/matches"
+                className="mt-2 px-5 py-2.5 rounded-full luxury-gradient text-white text-xs font-bold uppercase tracking-wider shadow hover:opacity-90 transition-all cursor-pointer"
               >
-                <div className="flex flex-col text-left">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-serif font-bold text-zinc-900 dark:text-zinc-50">{item.name}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-maroon-500/10 text-maroon-750 dark:text-gold-400 font-bold">
-                      {item.score}% Match
-                    </span>
-                  </div>
-                  <span className="text-xs text-zinc-550 dark:text-zinc-400 mt-1 font-light leading-normal">
-                    {item.age} yrs • {item.education} • {item.location} • Star: {item.star} • <span className="text-zinc-400 font-mono text-[10px]">{item.date}</span>
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 sm:self-center">
-                  {item.status === 'pending' ? (
-                    <>
-                      <button
-                        onClick={() => handleDecline(item.id, item.name)}
-                        className="p-2 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 text-zinc-500 cursor-pointer"
-                        title="Decline"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleAccept(item.id, item.name)}
-                        className="flex items-center gap-1 px-4 h-8.5 rounded-lg luxury-gradient text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
-                      >
-                        <Check className="h-4 w-4" /> Accept
-                      </button>
-                    </>
-                  ) : item.status === 'accepted' ? (
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full">
-                        Accepted ✓
-                      </span>
-                      <a
-                        href={`https://wa.me/919876543210?text=Hello%20${item.name},%20we%2520matched%20on%20Gokul%20Vivaham.`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center justify-center"
-                        title="WhatsApp Chat"
-                      >
-                        <Phone className="h-4.5 w-4.5" />
-                      </a>
-                    </div>
-                  ) : (
-                    <span className="text-xs font-semibold text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-full">
-                      Declined
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))
+                Explore Matches
+              </Link>
+            </div>
           ) : (
-            <div className="p-12 text-center text-zinc-500 font-mono text-xs border border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl bg-white dark:bg-zinc-900">
-              No interests received yet.
+            <div className="flex flex-col gap-4">
+              {pendingRequests.map((item: any) => (
+                <div
+                  key={item.id}
+                  className="p-5 bg-white dark:bg-zinc-900 rounded-3xl shadow-md border border-sandal-200 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300"
+                >
+                  <div className="flex items-center gap-4 text-left">
+                    {item.photoUrl ? (
+                      <img
+                        src={item.photoUrl}
+                        alt={item.name}
+                        className="w-14 h-14 rounded-full object-cover border-2 border-sandal-300 shadow-sm shrink-0"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-sandal-200 to-rose-50 dark:from-zinc-850 dark:to-maroon-950/20 border-2 border-sandal-300 flex items-center justify-center font-serif text-lg font-bold text-maroon-700 dark:text-gold-400 shadow-inner shrink-0 animate-in fade-in">
+                        {item.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+                      </div>
+                    )}
+
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-base font-serif font-bold text-zinc-900 dark:text-zinc-50 truncate">
+                          {item.name}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-maroon-500/10 text-maroon-750 dark:text-gold-400 font-bold shrink-0">
+                          {item.score || 85}% Match
+                        </span>
+                      </div>
+                      <span className="text-xs text-zinc-550 dark:text-zinc-400 mt-1 font-light leading-normal truncate">
+                        ID: {item.profileId} • {item.age} yrs • {item.education} • {item.location} • Star: {item.star} ({item.rasi})
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                        Received: {new Date(item.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 sm:self-center shrink-0">
+                    {item.isIncoming ? (
+                      <>
+                        <button
+                          onClick={() => handleRespond(item.id, 'declined')}
+                          disabled={actionInProgress !== null}
+                          className="p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-500 cursor-pointer disabled:opacity-50 transition-colors"
+                          title="Decline"
+                        >
+                          {actionInProgress === item.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <X className="h-4 w-4" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleRespond(item.id, 'accepted')}
+                          disabled={actionInProgress !== null}
+                          className="flex items-center gap-1.5 px-4 h-9.5 rounded-xl luxury-gradient text-white text-xs font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50 shadow hover:opacity-90 transition-all"
+                        >
+                          {actionInProgress === item.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Check className="h-4 w-4" /> Accept
+                            </>
+                          )}
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-xs font-bold text-gold-650 dark:text-gold-400 bg-gold-500/10 border border-gold-500/20 px-3 py-1.5 rounded-full uppercase tracking-wider select-none animate-in zoom-in-95 duration-200">
+                        Awaiting Response
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )
         ) : (
-          sentInterests.length > 0 ? (
-            sentInterests.map((item) => (
-              <div
-                key={item.id}
-                className="p-5 bg-white dark:bg-zinc-900 rounded-3xl shadow-md border border-sandal-200 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-              >
-                <div className="flex flex-col text-left">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-serif font-bold text-zinc-900 dark:text-zinc-50">{item.name}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-maroon-500/10 text-maroon-750 dark:text-gold-400 font-bold">
-                      {item.score}% Match
-                    </span>
-                  </div>
-                  <span className="text-xs text-zinc-550 dark:text-zinc-400 mt-1 font-light leading-normal">
-                    {item.age} yrs • {item.education} • {item.location} • Star: {item.star} • <span className="text-zinc-400 font-mono text-[10px]">{item.date}</span>
-                  </span>
-                </div>
-
-                <div className="flex items-center">
-                  {item.status === 'pending' ? (
-                    <span className="text-xs font-semibold text-gold-650 bg-gold-500/10 border border-gold-500/20 px-3 py-1.5 rounded-full uppercase tracking-wider">
-                      Awaiting Response
-                    </span>
-                  ) : item.status === 'accepted' ? (
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full">
-                        Accepted ✓
-                      </span>
-                      <a
-                        href={`https://wa.me/919876543210?text=Hello%20${item.name},%20we%2520matched%20on%20Gokul%20Vivaham.`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center justify-center"
-                      >
-                        <Phone className="h-4.5 w-4.5" />
-                      </a>
-                    </div>
-                  ) : (
-                    <span className="text-xs font-semibold text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-full">
-                      Declined
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))
+          /* Render Accepted Connections */
+          acceptedConnections.length === 0 ? (
+            <div className="p-12 text-center text-zinc-500 font-mono text-xs border border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl bg-white dark:bg-zinc-900 flex flex-col items-center gap-3">
+              <Heart className="h-8 w-8 text-zinc-350 dark:text-zinc-700" />
+              <span>No accepted connections yet. Accept received interests or wait for others to accept your requests!</span>
+            </div>
           ) : (
-            <div className="p-12 text-center text-zinc-500 font-mono text-xs border border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl bg-white dark:bg-zinc-900">
-              No interests sent yet. Explore matches and initiate connections!
+            <div className="flex flex-col gap-4">
+              {acceptedConnections.map((item: any) => {
+                const contacts = unlockedContacts[item.profileId];
+                const isUnlocking = unlockingId === item.profileId;
+
+                return (
+                  <div
+                    key={item.id}
+                    className="p-5 bg-white dark:bg-zinc-900 rounded-3xl shadow-md border border-sandal-200 dark:border-zinc-800/80 flex flex-col gap-4 animate-in slide-in-from-bottom-2 duration-300"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4 text-left">
+                        {item.photoUrl ? (
+                          <img
+                            src={item.photoUrl}
+                            alt={item.name}
+                            className="w-14 h-14 rounded-full object-cover border-2 border-gold-450 shadow-sm shrink-0"
+                          />
+                        ) : (
+                          <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-sandal-200 to-rose-50 dark:from-zinc-850 dark:to-maroon-950/20 border-2 border-gold-450 flex items-center justify-center font-serif text-lg font-bold text-maroon-700 dark:text-gold-400 shadow-inner shrink-0">
+                            {item.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+                          </div>
+                        )}
+
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-base font-serif font-bold text-zinc-900 dark:text-zinc-50 truncate flex items-center gap-1">
+                              {item.name}
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold shrink-0 select-none">
+                              Connected
+                            </span>
+                          </div>
+                          <span className="text-xs text-zinc-550 dark:text-zinc-400 mt-1 font-light leading-normal truncate">
+                            ID: {item.profileId} • {item.age} yrs • {item.education} • {item.location} • Star: {item.star} ({item.rasi})
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 sm:self-center shrink-0">
+                        <Link
+                          href={`/dashboard/chat?userId=${item.otherUserId}`}
+                          className="p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-650 dark:text-zinc-400 transition-colors"
+                          title="Open Chat Messages"
+                        >
+                          <MessageSquare className="h-4.5 w-4.5" />
+                        </Link>
+
+                        {!contacts && (
+                          <button
+                            onClick={() => handleViewContacts(item.profileId)}
+                            disabled={isUnlocking}
+                            className="flex items-center gap-1.5 px-4 h-9.5 rounded-xl luxury-gradient text-white text-xs font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50 shadow hover:opacity-90 transition-all"
+                          >
+                            {isUnlocking ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" /> Unlocking...
+                              </>
+                            ) : (
+                              <>
+                                <Lock className="h-4 w-4 text-gold-300" /> View Contacts
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Contact Details box (if unlocked or error) */}
+                    {contacts && (
+                      <div className="animate-in slide-in-from-top-2 duration-300">
+                        {contacts.error === 'premium_required' ? (
+                          /* Premium Upgrade Card */
+                          <div className="p-5 rounded-2xl bg-gradient-to-br from-gold-50/70 to-sandal-100/50 dark:from-zinc-900/60 dark:to-zinc-850/60 border border-gold-400/30 flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
+                            <div className="flex items-center gap-3">
+                              <div className="p-3 bg-gold-400/20 text-gold-700 dark:text-gold-450 rounded-full shrink-0">
+                                <Lock className="h-5 w-5" />
+                              </div>
+                              <div className="flex flex-col text-left">
+                                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-50">🔒 Premium Feature</span>
+                                <p className="text-[11px] text-zinc-550 dark:text-zinc-400 mt-0.5 leading-relaxed font-light">
+                                  Upgrade to a Premium membership plan to unlock contact details and connect directly.
+                                </p>
+                              </div>
+                            </div>
+                            <Link
+                              href="/dashboard/subscription"
+                              className="px-5 py-2.5 rounded-xl bg-gold-500 hover:bg-gold-650 text-zinc-950 text-xs font-bold uppercase tracking-wider transition-all shadow-md shrink-0 cursor-pointer text-center"
+                            >
+                              Upgrade to Premium
+                            </Link>
+                          </div>
+                        ) : (
+                          /* Secure contacts box */
+                          <div className="p-4 rounded-2xl bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in zoom-in-95 duration-200">
+                            {/* Email */}
+                            <div className="flex items-center justify-between p-3 bg-white dark:bg-zinc-950 rounded-xl border border-zinc-100 dark:border-zinc-900">
+                              <div className="flex items-center gap-2.5 text-left min-w-0">
+                                <Mail className="h-4.5 w-4.5 text-emerald-650 dark:text-emerald-400 shrink-0" />
+                                <div className="flex flex-col min-w-0">
+                                  <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-400">Email Address</span>
+                                  <span className="text-xs font-semibold text-zinc-855 dark:text-zinc-150 truncate">{contacts.email}</span>
+                                </div>
+                              </div>
+                              <div className="flex gap-2 shrink-0">
+                                <button
+                                  onClick={() => handleCopyText(contacts.email, `${item.profileId}-email`)}
+                                  className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-550 dark:text-zinc-400 transition-colors cursor-pointer"
+                                  title="Copy Email"
+                                >
+                                  {copiedId === `${item.profileId}-email` ? (
+                                    <Check className="h-4 w-4 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="h-4 w-4" />
+                                  )}
+                                </button>
+                                <a
+                                  href={`mailto:${contacts.email}`}
+                                  className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-550 dark:text-zinc-400 transition-colors flex items-center justify-center"
+                                  title="Send Email"
+                                >
+                                  <Unlock className="h-4 w-4 text-emerald-600" />
+                                </a>
+                              </div>
+                            </div>
+
+                            {/* Phone */}
+                            <div className="flex items-center justify-between p-3 bg-white dark:bg-zinc-950 rounded-xl border border-zinc-100 dark:border-zinc-900">
+                              <div className="flex items-center gap-2.5 text-left min-w-0">
+                                <Phone className="h-4.5 w-4.5 text-emerald-650 dark:text-emerald-400 shrink-0" />
+                                <div className="flex flex-col min-w-0">
+                                  <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-400">Phone Number</span>
+                                  <span className="text-xs font-semibold text-zinc-855 dark:text-zinc-150 truncate">{contacts.phone}</span>
+                                </div>
+                              </div>
+                              <div className="flex gap-2 shrink-0">
+                                <button
+                                  onClick={() => handleCopyText(contacts.phone, `${item.profileId}-phone`)}
+                                  className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-550 dark:text-zinc-400 transition-colors cursor-pointer"
+                                  title="Copy Phone"
+                                >
+                                  {copiedId === `${item.profileId}-phone` ? (
+                                    <Check className="h-4 w-4 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="h-4 w-4" />
+                                  )}
+                                </button>
+                                <a
+                                  href={`https://wa.me/91${contacts.phone.replace(/[^0-9]/g, '')}?text=Hello%20${encodeURIComponent(item.name)},%20we%20matched%20on%20Gokul%20Vivaham.`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-550 dark:text-zinc-400 transition-colors flex items-center justify-center"
+                                  title="WhatsApp Chat"
+                                >
+                                  <Phone className="h-4 w-4 text-emerald-600" />
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )
         )}
@@ -233,7 +452,7 @@ export default function Interests() {
       {/* Explore suggestions link */}
       <Link
         href="/dashboard/matches"
-        className="self-center mt-4 px-6 py-2.5 rounded-full border border-maroon-500/20 text-maroon-700 dark:text-gold-400 text-xs font-bold uppercase tracking-wider hover:bg-maroon-500/5 transition-all shadow-sm"
+        className="self-center mt-4 px-6 py-2.5 rounded-full border border-maroon-500/20 text-maroon-700 dark:text-gold-450 text-xs font-bold uppercase tracking-wider hover:bg-maroon-500/5 transition-all shadow-sm cursor-pointer"
       >
         Explore Matches list
       </Link>

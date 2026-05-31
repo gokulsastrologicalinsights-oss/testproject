@@ -31,12 +31,21 @@ export default function PartnerPreferences() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        setUserId(user.id);
+
+        // Resolve user's database ID from auth_user_id
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+
+        const currentUserId = userRow?.id || user.id;
+        setUserId(currentUserId);
 
         const { data, error } = await supabase
           .from('partner_preferences')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', currentUserId)
           .maybeSingle();
 
         if (data) {

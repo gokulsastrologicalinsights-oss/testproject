@@ -11,6 +11,24 @@ const realSupabase = createClient(supabaseUrl, supabaseKey);
 let currentSession: any = null;
 let listeners: Array<(event: string, session: any) => void> = [];
 
+const generateMockJwt = (user: any) => {
+  const safeBtoa = (str: string) => {
+    if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+      return window.btoa(str);
+    }
+    return Buffer.from(str).toString('base64');
+  };
+  const header = safeBtoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = safeBtoa(JSON.stringify({
+    sub: user.id,
+    email: user.email,
+    user_metadata: user.user_metadata,
+    role: user.user_metadata?.role || 'user'
+  }));
+  const signature = 'mock-signature';
+  return `${header}.${payload}.${signature}`;
+};
+
 if (typeof window !== 'undefined') {
   try {
     const saved = localStorage.getItem('gokul_mock_session');
@@ -45,13 +63,14 @@ const setSession = (session: any) => {
 
 const mockAuth = {
   signUp: async ({ email, password, options }: any) => {
+    const mockId = 'mock-user-' + Math.random().toString(36).substr(2, 9);
     const user = {
-      id: 'mock-user-' + Math.random().toString(36).substr(2, 9),
+      id: mockId,
       email,
       user_metadata: options?.data || { role: 'user', full_name: 'Mock User' }
     };
     const session = {
-      access_token: 'mock-token-' + Math.random().toString(36).substr(2, 9),
+      access_token: generateMockJwt(user),
       user
     };
     if (typeof window !== 'undefined') {
@@ -75,7 +94,7 @@ const mockAuth = {
         if (found) {
           if (found.password === password) {
             const session = {
-              access_token: 'mock-token-' + Math.random().toString(36).substr(2, 9),
+              access_token: generateMockJwt(found),
               user: { id: found.id, email: found.email, user_metadata: found.user_metadata }
             };
             setSession(session);
@@ -88,13 +107,28 @@ const mockAuth = {
     }
 
     if (email === 'demo@gokul.com' && password === '123456') {
+      const user = {
+        id: 'demo-user-id',
+        email: 'demo@gokul.com',
+        user_metadata: { role: 'user', full_name: 'Demo User' }
+      };
       const session = {
-        access_token: 'mock-demo-token',
-        user: {
-          id: 'demo-user-id',
-          email: 'demo@gokul.com',
-          user_metadata: { role: 'user', full_name: 'Demo User' }
-        }
+        access_token: generateMockJwt(user),
+        user
+      };
+      setSession(session);
+      return { data: { user: session.user, session }, error: null };
+    }
+
+    if (email === 'admin@gokul.com') {
+      const user = {
+        id: 'demo-admin-id',
+        email: 'admin@gokul.com',
+        user_metadata: { role: 'admin', full_name: 'Gokul Admin' }
+      };
+      const session = {
+        access_token: generateMockJwt(user),
+        user
       };
       setSession(session);
       return { data: { user: session.user, session }, error: null };
@@ -110,13 +144,14 @@ const mockAuth = {
   verifyOtp: async (params: any) => {
     const token = params.token;
     if (token === '1234' || token === '123456') {
+      const user = {
+        id: 'demo-user-id',
+        email: params.email || 'demo@gokul.com',
+        user_metadata: { role: 'user', full_name: 'Demo User' }
+      };
       const session = {
-        access_token: 'mock-otp-token',
-        user: {
-          id: 'demo-user-id',
-          email: params.email || 'demo@gokul.com',
-          user_metadata: { role: 'user', full_name: 'Demo User' }
-        }
+        access_token: generateMockJwt(user),
+        user
       };
       setSession(session);
       return { data: { user: session.user, session }, error: null };
@@ -125,13 +160,14 @@ const mockAuth = {
   },
 
   signInWithOAuth: async ({ provider }: any) => {
+    const user = {
+      id: 'demo-oauth-id',
+      email: 'oauth@gokul.com',
+      user_metadata: { role: 'user', full_name: 'OAuth User' }
+    };
     const session = {
-      access_token: 'mock-oauth-token',
-      user: {
-        id: 'demo-oauth-id',
-        email: 'oauth@gokul.com',
-        user_metadata: { role: 'user', full_name: 'OAuth User' }
-      }
+      access_token: generateMockJwt(user),
+      user
     };
     setSession(session);
     return { data: { url: '/dashboard' }, error: null };
@@ -167,9 +203,20 @@ const mockAuth = {
   }
 };
 
+const getServerMockStore = () => {
+  if (typeof globalThis !== 'undefined') {
+    if (!(globalThis as any).gokul_mock_db) {
+      (globalThis as any).gokul_mock_db = {};
+    }
+    return (globalThis as any).gokul_mock_db;
+  }
+  return {};
+};
+
 class MockQueryBuilder {
   private tableName: string;
   private filters: Array<(item: any) => boolean> = [];
+  private eqFilters: Record<string, any> = {};
   private isSingle = false;
   private isMaybeSingle = false;
   private limitCount = 0;
@@ -186,13 +233,99 @@ class MockQueryBuilder {
   }
 
   private getData() {
-    if (typeof window === 'undefined') return [];
+    if (typeof window === 'undefined') {
+      const store = getServerMockStore();
+      const key = this.getStorageKey();
+      if (!store[key]) {
+        if (this.tableName === 'subscription_plans') {
+          store[key] = [
+            {
+              id: '0ffd3070-7aba-4554-8790-93c76b318df6',
+              name: 'Free Plan',
+              price: 0,
+              duration_days: 3650,
+              features: { chat_access: false, contact_viewing: false }
+            },
+            {
+              id: '5d75dd4e-9e27-45aa-b9f5-0a71ff6327cf',
+              name: 'Silver Plan',
+              price: 1999,
+              duration_days: 90,
+              features: { chat_access: true, contact_viewing: true }
+            },
+            {
+              id: 'd50e37d5-21df-454b-8ed8-0e7ddb33827c',
+              name: 'Gold Plan',
+              price: 4999,
+              duration_days: 180,
+              features: { chat_access: true, contact_viewing: true }
+            },
+            {
+              id: 'b987dc02-0102-4279-b787-50987762532b',
+              name: 'Platinum Plan',
+              price: 9999,
+              duration_days: 365,
+              features: { chat_access: true, contact_viewing: true }
+            }
+          ];
+        } else if (this.tableName === 'admin_users') {
+          store[key] = [{
+            id: 'admin-user-id',
+            auth_user_id: 'demo-admin-id',
+            full_name: 'Gokul Admin',
+            email: 'admin@gokul.com',
+            role: 'admin'
+          }];
+        } else {
+          store[key] = [];
+        }
+      }
+      return store[key];
+    }
+
     try {
       const data = localStorage.getItem(this.getStorageKey());
       if (data) return JSON.parse(data);
     } catch (e) {}
 
     // Seed defaults
+    if (this.tableName === 'subscription_plans') {
+      const defaultPlans = [
+        {
+          id: '0ffd3070-7aba-4554-8790-93c76b318df6',
+          name: 'Free Plan',
+          price: 0,
+          duration_days: 3650,
+          features: { chat_access: false, contact_viewing: false }
+        },
+        {
+          id: '5d75dd4e-9e27-45aa-b9f5-0a71ff6327cf',
+          name: 'Silver Plan',
+          price: 1999,
+          duration_days: 90,
+          features: { chat_access: true, contact_viewing: true }
+        },
+        {
+          id: 'd50e37d5-21df-454b-8ed8-0e7ddb33827c',
+          name: 'Gold Plan',
+          price: 4999,
+          duration_days: 180,
+          features: { chat_access: true, contact_viewing: true }
+        },
+        {
+          id: 'b987dc02-0102-4279-b787-50987762532b',
+          name: 'Platinum Plan',
+          price: 9999,
+          duration_days: 365,
+          features: { chat_access: true, contact_viewing: true }
+        }
+      ];
+      try {
+        localStorage.setItem(this.getStorageKey(), JSON.stringify(defaultPlans));
+      } catch (e) {}
+      return defaultPlans;
+    }
+
     if (this.tableName === 'admin_users') {
       return [{
         id: 'admin-user-id',
@@ -206,7 +339,11 @@ class MockQueryBuilder {
   }
 
   private saveData(data: any) {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined') {
+      const store = getServerMockStore();
+      store[this.getStorageKey()] = data;
+      return;
+    }
     try {
       localStorage.setItem(this.getStorageKey(), JSON.stringify(data));
     } catch (e) {}
@@ -232,6 +369,7 @@ class MockQueryBuilder {
   }
 
   eq(column: string, value: any) {
+    this.eqFilters[column] = value;
     this.filters.push((item: any) => item[column] === value);
     return this;
   }
@@ -309,8 +447,25 @@ class MockQueryBuilder {
 
     if (this.insertData) {
       const dataArray = Array.isArray(this.insertData) ? this.insertData : [this.insertData];
+      
+      // Enforce unique constraints in Mock mode
+      if (this.tableName === 'users') {
+        const authUserIds = dataArray.map(d => d.auth_user_id).filter(Boolean);
+        const emails = dataArray.map(d => d.email?.toLowerCase()).filter(Boolean);
+        items = items.filter((item: any) => 
+          !authUserIds.includes(item.auth_user_id) && 
+          !emails.includes(item.email?.toLowerCase())
+        );
+      } else if (this.tableName === 'profiles') {
+        const userIds = dataArray.map(d => d.user_id).filter(Boolean);
+        items = items.filter((item: any) => !userIds.includes(item.user_id));
+      } else if (this.tableName === 'partner_preferences') {
+        const userIds = dataArray.map(d => d.user_id).filter(Boolean);
+        items = items.filter((item: any) => !userIds.includes(item.user_id));
+      }
+
       const inserted = dataArray.map(d => ({
-        id: d.id || Math.random().toString(36).substr(2, 9),
+        id: d.id || Math.random().toString(36).substr(2, 11),
         created_at: new Date().toISOString(),
         ...d
       }));
@@ -340,6 +495,52 @@ class MockQueryBuilder {
 
     let filtered = items.filter((item: any) => this.filters.every((f: any) => f(item)));
 
+    // Dynamic user lookup for mock mode
+    if (this.tableName === 'users' && filtered.length === 0) {
+      const authUserId = this.eqFilters['auth_user_id'];
+      if (authUserId) {
+        const mockUser = {
+          id: authUserId,
+          auth_user_id: authUserId,
+          email: this.eqFilters['email'] || 'demo@gokul.com',
+          role: 'user',
+          status: 'active'
+        };
+        items.push(mockUser);
+        this.saveData(items);
+        filtered = [mockUser];
+      }
+    }
+
+    // Handle relationship joins in mock mode
+    if (this.tableName === 'subscriptions') {
+      const plans = typeof window === 'undefined'
+        ? (getServerMockStore()['gokul_mock_subscription_plans'] || [])
+        : (() => {
+            try {
+              return JSON.parse(localStorage.getItem('gokul_mock_subscription_plans') || '[]');
+            } catch (e) { return []; }
+          })();
+      filtered = filtered.map((item: any) => {
+        const plan = plans.find((p: any) => p.id === item.plan_id) || null;
+        return { ...item, plan };
+      });
+    }
+
+    if (this.tableName === 'transactions') {
+      const payments = typeof window === 'undefined'
+        ? (getServerMockStore()['gokul_mock_payments'] || [])
+        : (() => {
+            try {
+              return JSON.parse(localStorage.getItem('gokul_mock_payments') || '[]');
+            } catch (e) { return []; }
+          })();
+      filtered = filtered.map((item: any) => {
+        const payment = payments.find((p: any) => p.id === item.payment_id) || null;
+        return { ...item, payment };
+      });
+    }
+
     if (this.limitCount > 0) {
       filtered = filtered.slice(0, this.limitCount);
     }
@@ -367,6 +568,39 @@ export const supabase = isMock
         }
         if (prop === 'from') {
           return (tableName: string) => new MockQueryBuilder(tableName);
+        }
+        if (prop === 'rpc') {
+          return async (fnName: string, args: any) => {
+            if (fnName === 'increment_coupon_uses') {
+              const couponId = args.coupon_row_id;
+              try {
+                if (typeof window !== 'undefined') {
+                  const coupons = JSON.parse(localStorage.getItem('gokul_mock_coupons') || '[]');
+                  const updated = coupons.map((c: any) => {
+                    if (c.id === couponId) {
+                      return { ...c, uses_count: (c.uses_count || 0) + 1 };
+                    }
+                    return c;
+                  });
+                  localStorage.setItem('gokul_mock_coupons', JSON.stringify(updated));
+                } else {
+                  const store = getServerMockStore();
+                  const coupons = store['gokul_mock_coupons'] || [];
+                  const updated = coupons.map((c: any) => {
+                    if (c.id === couponId) {
+                      return { ...c, uses_count: (c.uses_count || 0) + 1 };
+                    }
+                    return c;
+                  });
+                  store['gokul_mock_coupons'] = updated;
+                }
+                return { data: null, error: null };
+              } catch (e) {
+                return { data: null, error: e };
+              }
+            }
+            return { data: null, error: null };
+          };
         }
         return (target as any)[prop];
       }

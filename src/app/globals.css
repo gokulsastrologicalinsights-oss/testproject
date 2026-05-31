@@ -131,6 +131,23 @@ h1, h2, h3, h4, h5, h6, .font-serif {
   background: #b2912a;
 }
 
+/* Input text color */
+input,
+textarea,
+select {
+  color: #ffffff !important;
+}
+
+select option {
+  color: #ffffff !important;
+  background-color: #1f1f1f !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
 /* Accessibility & Touch Targets */
 .touch-target {
   min-width: 44px;

@@ -2,6 +2,7 @@
 
 import { Heart, ShieldCheck, CheckCircle2, Sparkles, UserPlus } from 'lucide-react';
 import RegisterStepper from '@/components/register/RegisterStepper';
+import { SupportSection } from '@/components/contact/SupportSection';
 
 export default function RegisterPage() {
   return (
@@ -52,9 +53,12 @@ export default function RegisterPage() {
       </div>
 
       {/* RIGHT COLUMN: REGISTER MULTI-STEP FORM CONTAINER */}
-      <div className="lg:col-span-7 flex flex-col justify-center items-center p-6 sm:p-12 md:p-16 bg-sandal-50/20 dark:bg-zinc-950/20 w-full overflow-y-auto">
+      <div className="lg:col-span-7 flex flex-col justify-center items-center p-6 sm:p-12 md:p-16 bg-sandal-50/20 dark:bg-zinc-950/20 w-full overflow-y-auto gap-6">
         <div className="w-full max-w-3xl">
           <RegisterStepper />
+        </div>
+        <div className="w-full max-w-3xl">
+          <SupportSection compact />
         </div>
       </div>
 

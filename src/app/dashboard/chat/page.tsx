@@ -1,13 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import ChatLayout from '@/components/chat/ChatLayout';
 import ConversationList from '@/components/chat/ConversationList';
 import ChatWindow from '@/components/chat/ChatWindow';
 import { chatService } from '@/services/chat.service';
 import { supabase } from '@/lib/supabase';
+import { useSearchParams } from 'next/navigation';
 
-export default function DashboardChatPage() {
+function ChatPageContent() {
+  const searchParams = useSearchParams();
+  const targetUserId = searchParams.get('userId');
+  const targetChatId = searchParams.get('chatId');
+
   const [conversations, setConversations] = useState<any[]>([]);
   const [activeChatId, setActiveChatId] = useState<string>('');
   const [messages, setMessages] = useState<any[]>([]);
@@ -22,7 +27,23 @@ export default function DashboardChatPage() {
         const { data } = await chatService.getConversations();
         if (data) {
           setConversations(data);
-          // Auto select first chat if available
+          
+          // Select chat based on query params or fallback to first chat
+          if (targetChatId) {
+            const foundChat = data.find((c) => c.id === targetChatId);
+            if (foundChat) {
+              setActiveChatId(targetChatId);
+              return;
+            }
+          }
+          if (targetUserId) {
+            const foundChat = data.find((c) => c.other_user_id === targetUserId);
+            if (foundChat) {
+              setActiveChatId(foundChat.id);
+              return;
+            }
+          }
+
           if (data.length > 0) {
             setActiveChatId(data[0].id);
           }
@@ -34,7 +55,7 @@ export default function DashboardChatPage() {
       }
     };
     loadConversations();
-  }, []);
+  }, [targetChatId, targetUserId]);
 
   // Load messages and subscribe to real-time channel
   useEffect(() => {
@@ -169,5 +190,21 @@ export default function DashboardChatPage() {
         />
       </ChatLayout>
     </div>
+  );
+}
+
+export default function DashboardChatPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col gap-4 text-left animate-pulse">
+        <div className="flex flex-col gap-2">
+          <div className="h-8 w-60 bg-zinc-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
+          <div className="h-4 w-80 bg-zinc-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
+        </div>
+        <div className="h-64 bg-zinc-200 dark:bg-zinc-800 rounded-2xl animate-pulse" />
+      </div>
+    }>
+      <ChatPageContent />
+    </Suspense>
   );
 }

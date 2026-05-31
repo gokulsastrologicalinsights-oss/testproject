@@ -21,7 +21,7 @@ const TextInput = forwardRef<HTMLInputElement, TextInputProps>(
           )}
           <input
             ref={ref}
-            className={`w-full h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-zinc-800 dark:text-zinc-150 ${
+            className={`w-full h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-maroon-500 text-white ${
               icon ? 'pl-11 pr-3.5' : 'px-3.5'
             } ${className}`}
             {...props}

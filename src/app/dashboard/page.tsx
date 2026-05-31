@@ -9,12 +9,12 @@ import {
 import DashboardStats from '@/components/dashboard/DashboardStats';
 import { supabase } from '@/lib/supabase';
 import { matchService } from '@/services/match.service';
+import FeaturedProfilesCarousel from '@/components/home/FeaturedProfilesCarousel';
 
 export default function UserDashboard() {
   
   const [userName, setUserName] = useState('Member');
   const [checklist, setChecklist] = useState([
-    { id: 1, name: 'Verify Phone Number', completed: false, action: 'Verify' },
     { id: 2, name: 'Add Profile Photo', completed: false, action: 'Add' },
     { id: 3, name: 'Upload Horoscope File', completed: false, action: 'Upload' },
     { id: 4, name: 'Define Partner Expectations', completed: false, action: 'Add' },
@@ -23,6 +23,7 @@ export default function UserDashboard() {
   const [matches, setMatches] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeBoost, setActiveBoost] = useState<any>(null);
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -30,11 +31,20 @@ export default function UserDashboard() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
+        // Resolve user's database ID from auth_user_id
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+
+        const currentUserId = userRow?.id || user.id;
+
         // 1. Fetch Profile details and files
         const { data: profile } = await supabase
           .from('profiles')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', currentUserId)
           .maybeSingle();
 
         if (profile) {
@@ -44,7 +54,7 @@ export default function UserDashboard() {
           const { data: photo } = await supabase
             .from('gallery_images')
             .select('id')
-            .eq('user_id', user.id)
+            .eq('user_id', currentUserId)
             .eq('is_profile_picture', true)
             .limit(1)
             .maybeSingle();
@@ -53,12 +63,11 @@ export default function UserDashboard() {
           const { data: horoscope } = await supabase
             .from('horoscope_uploads')
             .select('id')
-            .eq('user_id', user.id)
+            .eq('user_id', currentUserId)
             .limit(1)
             .maybeSingle();
 
           setChecklist([
-            { id: 1, name: 'Verify Phone Number', completed: !!profile.mobile_number || true, action: 'Verify' }, // Mocked phone verification as always true for demo ease
             { id: 2, name: 'Add Profile Photo', completed: !!photo, action: 'Add' },
             { id: 3, name: 'Upload Horoscope File', completed: !!horoscope, action: 'Upload' },
             { id: 4, name: 'Define Partner Expectations', completed: !!profile.partner_expectations, action: 'Add' },
@@ -77,6 +86,18 @@ export default function UserDashboard() {
         if (recommendations) {
           setMatches(recommendations.slice(0, 3));
         }
+
+        // 4. Fetch active boost status
+        const { data: boost } = await supabase
+          .from('featured_profiles')
+          .select('*')
+          .eq('user_id', currentUserId)
+          .eq('is_active', true)
+          .gt('end_date', new Date().toISOString())
+          .order('end_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        setActiveBoost(boost);
 
       } catch (err) {
         console.error('Error loading dashboard:', err);
@@ -138,6 +159,39 @@ export default function UserDashboard() {
           View All Matches
         </Link>
       </div>
+
+      {/* Active Boost Banner */}
+      {activeBoost ? (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-gold-500/10 to-amber-500/5 dark:from-zinc-900 dark:to-zinc-900/40 border border-gold-450/40 flex items-center justify-between gap-4 text-xs font-light text-zinc-650 dark:text-zinc-400">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-gold-400/20 text-gold-650 dark:text-gold-400 shrink-0 border border-gold-450/15">
+              <Star className="h-4 w-4 fill-gold-400 text-gold-500" />
+            </div>
+            <div>
+              <span className="font-semibold text-zinc-900 dark:text-white">Profile Promotion Active!</span>
+              <p className="text-[10px] text-zinc-550 dark:text-zinc-450 mt-0.5">Your profile is featured on the homepage and search results. Expires on {new Date(activeBoost.end_date).toLocaleDateString()}.</p>
+            </div>
+          </div>
+          <Link href="/dashboard/promote-profile" className="px-3 py-1.5 rounded-lg border border-gold-500/30 text-gold-650 dark:text-gold-400 hover:bg-gold-500/5 font-bold uppercase tracking-wider text-[9px] shrink-0 transition-colors">
+            Manage
+          </Link>
+        </div>
+      ) : (
+        <div className="p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-sandal-200 dark:border-zinc-800/80 flex items-center justify-between gap-4 text-xs font-light text-zinc-650 dark:text-zinc-450 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-maroon-500/5 text-maroon-700 dark:text-gold-400 shrink-0 border border-maroon-500/10">
+              <Sparkles className="h-4 w-4 text-maroon-600 dark:text-gold-400" />
+            </div>
+            <div>
+              <span className="font-semibold text-zinc-850 dark:text-zinc-200">Want 10x more profile views?</span>
+              <p className="text-[10px] text-zinc-500 mt-0.5">Boost your profile to appear at the top of search matches and on our homepage carousel.</p>
+            </div>
+          </div>
+          <Link href="/dashboard/promote-profile" className="px-3.5 py-1.5 rounded-lg luxury-gradient text-white font-bold uppercase tracking-wider text-[9px] shrink-0 transition-all shadow-sm">
+            Boost Profile
+          </Link>
+        </div>
+      )}
 
       {/* MID-LEVEL METRICS & TRACKER GRID */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
@@ -301,6 +355,10 @@ export default function UserDashboard() {
         </div>
       </div>
 
+      {/* FEATURED PROFILES SPOTLIGHT */}
+      <div className="mt-4">
+        <FeaturedProfilesCarousel />
+      </div>
     </div>
   );
 }

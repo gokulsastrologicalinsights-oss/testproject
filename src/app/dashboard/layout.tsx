@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   Home, Heart, Star, UserCheck, ShieldAlert, 
-  Settings, Compass, FileText, User
+  Settings, Compass, FileText, User, Calendar
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { SupportSection } from '@/components/contact/SupportSection';
+import { useProfileStore } from '@/stores/profileStore';
 
 export default function DashboardLayout({
   children,
@@ -15,7 +17,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const [profile, setProfile] = useState<any>(null);
+  const { profile, setProfile } = useProfileStore() as any;
   const [loading, setLoading] = useState(true);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
@@ -25,10 +27,19 @@ export default function DashboardLayout({
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
+        // Resolve user's database ID from auth_user_id
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+
+        const currentUserId = userRow?.id || user.id;
+
         const { data } = await supabase
           .from('profiles')
-          .select('first_name, last_name, profile_id, is_premium, is_verified')
-          .eq('user_id', user.id)
+          .select('first_name, last_name, profile_id, is_premium, is_verified, is_suspended, is_banned, warning_notes')
+          .eq('user_id', currentUserId)
           .maybeSingle();
 
         if (data) {
@@ -49,7 +60,7 @@ export default function DashboardLayout({
         const { data: gallery } = await supabase
           .from('gallery_images')
           .select('image_url')
-          .eq('user_id', user.id)
+          .eq('user_id', currentUserId)
           .eq('is_profile_picture', true)
           .limit(1)
           .maybeSingle();
@@ -70,8 +81,12 @@ export default function DashboardLayout({
   const links = [
     { name: 'Overview', href: '/dashboard', icon: Home },
     { name: 'Search Matches', href: '/dashboard/matches', icon: Compass },
+    { name: 'Match Interests', href: '/dashboard/interests', icon: Heart },
     { name: 'Partner Preference', href: '/dashboard/preferences', icon: Settings },
     { name: 'My Profile', href: '/dashboard/profile', icon: User },
+    { name: 'Profile Verification', href: '/dashboard/verification', icon: UserCheck },
+    { name: 'Astrologer Consultation', href: '/dashboard/consultations', icon: Calendar },
+    { name: 'Promote Profile', href: '/dashboard/promote-profile', icon: Star },
   ];
 
   const initials = profile 
@@ -82,6 +97,49 @@ export default function DashboardLayout({
     : 'Loading...';
   const profileId = profile ? `ID: ${profile.profile_id}` : '...';
   const memberLevel = profile?.is_premium ? 'Premium Member' : 'Standard Member';
+
+  if (profile?.is_suspended || profile?.is_banned) {
+    const handleSignOut = async () => {
+      await supabase.auth.signOut();
+      window.location.href = '/login';
+    };
+
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl flex flex-col items-center gap-6 text-center select-none animate-in fade-in duration-300">
+          <div className="p-4 rounded-full bg-red-500/10 text-red-500 shadow-inner">
+            <ShieldAlert className="h-10 w-10 animate-bounce" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <h1 className="text-xl font-serif font-black text-white">
+              {profile.is_banned ? 'Account Permanently Banned' : 'Account Suspended'}
+            </h1>
+            <p className="text-xs text-zinc-400 font-light leading-relaxed">
+              Your matrimonial profile on Gokul Vivaham has been {profile.is_banned ? 'permanently banned' : 'temporarily suspended'} by our safety moderation team for violating community guidelines.
+            </p>
+          </div>
+
+          {(profile.warning_notes || profile.warning_notes === '') && (
+            <div className="w-full p-4 rounded-2xl bg-zinc-950 border border-zinc-850 text-left">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider font-mono">Moderator Notes:</span>
+              <p className="text-xs text-zinc-300 font-light mt-1 italic font-serif">"{profile.warning_notes || 'Violation of community safety guidelines'}"</p>
+            </div>
+          )}
+
+          <div className="text-[11px] text-zinc-500 leading-normal font-light">
+            If you believe this action was taken in error or want to appeal this safety decision, please contact our support desk at <strong className="font-semibold text-zinc-450">support@gokulvivaham.com</strong>.
+          </div>
+
+          <button
+            onClick={handleSignOut}
+            className="w-full py-2.5 rounded-xl bg-zinc-850 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold uppercase tracking-wider cursor-pointer border border-zinc-800"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 w-full bg-sandal-50/30 dark:bg-zinc-950/20 py-8 transition-colors">
@@ -144,19 +202,7 @@ export default function DashboardLayout({
 
           </div>
 
-          {/* Quick Help Callout */}
-          <div className="p-5 rounded-3xl bg-maroon-500/5 dark:bg-maroon-950/10 border border-maroon-500/10 text-left flex flex-col gap-2.5">
-            <span className="text-xs font-bold text-maroon-600 dark:text-gold-400 uppercase tracking-wider">Astro matching issues?</span>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 font-light leading-relaxed">
-              If your horoscope matching requires manual correction, contact our helpdesk.
-            </p>
-            <Link 
-              href="/contact" 
-              className="text-xs font-bold text-maroon-700 dark:text-gold-400 hover:underline inline-flex items-center gap-1"
-            >
-              Get Support <ArrowUpRight className="h-3 w-3" />
-            </Link>
-          </div>
+          <SupportSection compact />
         </aside>
 
         {/* Right Content Area */}
@@ -166,14 +212,5 @@ export default function DashboardLayout({
 
       </div>
     </div>
-  );
-}
-
-// Inline ArrowUpRight icon since it's locally used
-function ArrowUpRight({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-    </svg>
   );
 }
