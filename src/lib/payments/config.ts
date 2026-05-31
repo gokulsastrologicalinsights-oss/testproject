@@ -23,7 +23,8 @@ if (!parsedEnv.success) {
     parsedEnv.error.issues.map(issue => ` - ${issue.path.join('.')}: ${issue.message}`).join('\n');
   console.warn(errorMsg);
   
-  if (process.env.NODE_ENV === 'production') {
+  // Log warning and only throw in production if not building/running on Vercel
+  if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
     throw new Error(errorMsg);
   }
 }
